@@ -1,0 +1,32 @@
+name: mouseba
+channels:
+  - conda-forge
+dependencies:
+  # Python runtime
+  - python=3.11
+  - numpy
+  - pandas
+
+  # Build toolchain
+  - cmake
+  - ninja
+  - pkg-config
+  - pybind11
+  - pip
+
+  # C++ toolchain (keeps everything inside conda; no apt needed)
+  - c-compiler
+  - cxx-compiler
+
+  # Optimization + linear algebra
+  - eigen
+  - ceres-solver
+
+  # Video / rendering (for --write-video in baWithPathModel_v3.py)
+  - opencv
+  - imageio
+  - imageio-ffmpeg
+  - ffmpeg
+
+  # (Optional but often useful for debugging / dev)
+  - matplotlib

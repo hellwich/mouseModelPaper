@@ -1,0 +1,34 @@
+name: dlc_mouse
+channels:
+  - conda-forge
+  - pytorch
+  - nvidia
+dependencies:
+  - python=3.10
+  - pip
+
+  # Core IO / scientific stack used by DLC and the generated project files
+  - numpy
+  - scipy
+  - pandas
+  - pyyaml
+  - h5py
+  - pytables
+  - scikit-image
+  - scikit-learn
+  - matplotlib
+  - tqdm
+
+  # Video handling
+  - opencv
+  - ffmpeg
+
+  # Optional GUI support (remove if you want a headless environment)
+#  - wxpython
+
+  # Convenience
+  - ipython
+
+  # DLC is easiest to keep in pip here; conda resolves the heavy libs above
+  - pip:
+      - deeplabcut

@@ -1,0 +1,25 @@
+Sunday 08.03.26 (at TUB)
+This does not work:
+python baWithPathModel_v5_1.py   --cameras ../cameras.json   --template ../mouse3_mesh_shortTail.txt   --dlc ../dlc_long.csv   --fps 10   --out ../coords_3d_est.csv   --gt ../../mouse_sim/out2m_2/coords_3d.csv   --allow-mouse-swap   --verbose   --write-video   --video-dir ../videos_est   --identity-track
+
+So we should go step by step: first 3-ray points (not run yet)
+python baPointsOnly.py   --cameras ../cameras.json   --dlc ../dlc_long.csv   --fps 10   --out ../coords_3d_pointsOnly.csv   --gt ../../mouse_sim/out2m_2/coords_3d.csv   --likelihood-min 0.8   --identity-track   --write-video   --template ../mouse3_mesh_shortTail.txt   --video-dir ../videos_pointsOnly
+
+11.3.26
+python overlay_dlc_on_videos.py   --dlc ../dlc_long.csv   --topIn ../../mouse_sim/out2m_2_render/dlc_predictions/cam1_topDLC_dlcrnetms5_mouse_sim_synth2026-02-27shuffle1_200000_el_bp_labeled.mp4 --frontIn ../../mouse_sim/out2m_2_render/dlc_predictions/cam2_frontDLC_dlcrnetms5_mouse_sim_synth2026-02-27shuffle1_200000_el_bp_labeled.mp4 --sideIn ../../mouse_sim/out2m_2_render/dlc_predictions/cam3_sideDLC_dlcrnetms5_mouse_sim_synth2026-02-27shuffle1_200000_el_bp_labeled.mp4   --topOut top_anno.mp4 --frontOut front_anno.mp4 --sideOut side_anno.mp4   --template ../mouse3_mesh_shortTail.txt   --likelihood-min 0.2
+
+13.3.26
+python overlay_dlc_on_videos_v5.py --dlc ../dlc_long.csv --topIn ../../mouse_sim/out2m_2_render/cam1_top.mp4  --frontIn ../../mouse_sim/out2m_2_render/cam2_front.mp4 --sideIn ../../mouse_sim/out2m_2_render/cam3_side.mp4 --topOut top_anno.mp4 --frontOut front_anno.mp4 --sideOut side_anno.mp4 --joinedVideo joined_anno.mp4  --template ../mouse3_mesh_shortTail.txt   --sam   --sam-checkpoint ./sam_vit_b_01ec64.pth   --sam-model-type vit_b   --sam-alpha 1.0   --mouse0-bgr "25,35,40"   --mouse1-bgr "40,35,25" --sam-only --sam-every 5
+
+
+19.3.26
+ 1891  python overlay_dlc_on_videos_v9_clean.py   --dlc ../dlc_long.csv   --topIn ../../mouse_sim/out2m_2_render/cam1_top.mp4   --frontIn ../../mouse_sim/out2m_2_render/cam2_front.mp4   --sideIn ../../mouse_sim/out2m_2_render/cam3_side.mp4   --topOut top_anno_v9_cleand.mp4   --frontOut front_anno_v9_cleand.mp4   --sideOut side_anno_v9_cleand.mp4   --joinedVideo joined_anno_v9_cleand.mp4   --template ../mouse3_mesh_shortTail.txt   --sam   --sam-checkpoint ./sam_vit_b_01ec64.pth   --sam-model-type vit_b   --sam-alpha 1.0   --mouse0-bgr "25,35,40"   --mouse1-bgr "40,35,25"   --sam-only   --sam-stats-out sam_stats_v9_cleand.json --sam-max-factor 99 --number-of-frames 90 --sam-debug-candidates --frame-interval 500,650
+ 1892  python overlay_dlc_on_videos_v9_clean_frameNumbersVideo_diagfix.py   --dlc ../dlc_long.csv   --topIn ../../mouse_sim/out2m_2_render/cam1_top.mp4   --frontIn ../../mouse_sim/out2m_2_render/cam2_front.mp4   --sideIn ../../mouse_sim/out2m_2_render/cam3_side.mp4   --topOut top_anno_v9_cleand.mp4   --frontOut front_anno_v9_cleand.mp4   --sideOut side_anno_v9_cleand.mp4   --joinedVideo joined_anno_v9_cleand.mp4   --template ../mouse3_mesh_shortTail.txt   --sam   --sam-checkpoint ./sam_vit_b_01ec64.pth   --sam-model-type vit_b   --sam-alpha 1.0   --mouse0-bgr "25,35,40"   --mouse1-bgr "40,35,25"   --sam-only   --sam-stats-out sam_stats_v9_cleand.json --sam-max-factor 99 --number-of-frames 90 --sam-debug-candidates --frame-interval 500,650
+ 1893  python overlay_dlc_on_videos_v9_clean_frameNumbersVideo_diagfix.py   --dlc ../dlc_long.csv   --topIn ../../mouse_sim/out2m_2_render/cam1_top.mp4   --frontIn ../../mouse_sim/out2m_2_render/cam2_front.mp4   --sideIn ../../mouse_sim/out2m_2_render/cam3_side.mp4   --topOut top_anno_v9_cleand.mp4   --frontOut front_anno_v9_cleand.mp4   --sideOut side_anno_v9_cleand.mp4   --joinedVideo joined_anno_v9_cleand.mp4   --template ../mouse3_mesh_shortTail.txt   --sam   --sam-checkpoint ./sam_vit_b_01ec64.pth   --sam-model-type vit_b   --sam-alpha 1.0   --mouse0-bgr "25,35,40"   --mouse1-bgr "40,35,25"   --sam-only   --sam-stats-out sam_stats_v9_cleand.json --sam-max-factor 99 --number-of-frames 90 --sam-debug-candidates --frame-interval 590,700
+ 1894  python overlay_dlc_on_videos_v9_clean_frameNumbersVideo_aggstats.py   --dlc ../dlc_long.csv   --topIn ../../mouse_sim/out2m_2_render/cam1_top.mp4   --frontIn ../../mouse_sim/out2m_2_render/cam2_front.mp4   --sideIn ../../mouse_sim/out2m_2_render/cam3_side.mp4   --topOut top_anno_v9_cleand.mp4   --frontOut front_anno_v9_cleand.mp4   --sideOut side_anno_v9_cleand.mp4   --joinedVideo joined_anno_v9_cleand.mp4   --template ../mouse3_mesh_shortTail.txt   --sam   --sam-checkpoint ./sam_vit_b_01ec64.pth   --sam-model-type vit_b   --sam-alpha 1.0   --mouse0-bgr "25,35,40"   --mouse1-bgr "40,35,25"   --sam-only   --sam-stats-out sam_stats_v9_cleand.json --sam-max-factor 99 --sam-debug-candidates
+ 
+ 
+ 22.3.26
+ #dlc_long is a copy of the original prediction of dlc at ../mouse_sim/out2m_2_render
+ (mouse_seg_clean) hellwich@Artemis:~/hellwich/sdk3/mouseModel/mouseba$ diff dlc_long.csv ../mouse_sim/out2m_2_render/dlc_long.csv 
+

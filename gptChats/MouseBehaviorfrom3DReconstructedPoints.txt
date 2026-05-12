@@ -1,0 +1,2242 @@
+Title: Mouse Behavior from 3D Reconstructed Points
+ID: 69d15fe9-11b4-8393-acd7-fd9af65b58d8
+
+User: In the conda environment defined by environment.yml I used to run predict...py.
+
+Meanwhile in the same environment I did a couple of things. The important operations are protocol-led in protocol.txt.
+
+Now when I run the predict... the following happened:
+
+(mouse_sim) hellwich@Artemis:~/hellwich/sdk3/mouseModel/mouse_sim$ python predict_behavior_pair_xlstm.py   --ckpt out_pair_train2/behavior_pair_lstm.pt   --coords-3d out_pair/coords_3d.csv   --out-dir out_pair_pred2   --no-labels
+Traceback (most recent call last):
+  File "/media/hellwich/Herakles/hellwich/hellwich/sdk3/mouseModel/mouse_sim/predict_behavior_pair_xlstm.py", line 22, in <module>
+    import torch
+  File "/home/hellwich/anaconda3/envs/mouse_sim/lib/python3.11/site-packages/torch/__init__.py", line 229, in <module>
+    from torch._C import *  # noqa: F403
+    ^^^^^^^^^^^^^^^^^^^^^^
+ImportError: /home/hellwich/anaconda3/envs/mouse_sim/lib/python3.11/site-packages/torch/lib/libtorch_cpu.so: undefined symbol: iJIT_NotifyEvent
+
+The input files are existing.
+
+Do you have an idea what may have happened? (In another environment concerned with a deep-learning problem I had the same or a similar error message that only disappeared after changing the existing environment. But I do not recall what has been done.)
+
+User: Please respond now.
+
+Assistant: I’m checking the specific PyTorch symbol error and matching it against your environment file and the operations log, so I can tell you what likely broke and what to try first.
+
+Assistant: I’ve got a likely culprit now: this error is usually not caused by your script or data at all, but by a changed low-level PyTorch/MKL/OpenMP combination inside the environment. I’m checking the most reliable fix path so I can give you the least disruptive repair first.
+
+Assistant: Yes. The most likely explanation is: your environment has drifted into a broken PyTorch/MKL/OpenMP combination, and this is not a problem with your CSVs or checkpoint.
+
+Your traceback dies at `import torch`, before the script can touch the input files. In your script, `torch` is imported at top level, so failure there happens before argument parsing or data loading. fileciteturn0file1 Your protocol also shows that this same project successfully trained and predicted in February 2026, including the `out_pair_train2` workflow, so the code path itself used to work. fileciteturn0file2
+
+The specific symbol `iJIT_NotifyEvent` is a known PyTorch binary/runtime compatibility failure. PyTorch maintainers documented that `import torch` can fail with exactly this error when PyTorch is combined with MKL 2024.1+, and that downgrading MKL to 2024.0 resolves it. Independent reports around Intel’s PyTorch ecosystem say the same thing: newer oneAPI/MKL runtimes broke binaries built against the older runtime. citeturn1search0turn4search5turn4search8
+
+Why it probably happened in your case: your `environment.yml` mixes `pytorch`, `nvidia`, and `conda-forge`, while leaving most package versions unpinned. That is workable initially, but later `conda install`, `mamba install`, or `pip install` operations in the same env can silently replace low-level libraries such as `mkl`, `intel-openmp`, or related runtime pieces. Once that happens, PyTorch may still be installed, but no longer loadable. fileciteturn0file0 citeturn2search0turn1search0
+
+The fastest thing I would try in-place is this:
+
+```bash
+conda activate mouse_sim
+
+conda list | egrep '^(pytorch|torchvision|torchaudio|pytorch-cuda|mkl|intel-openmp|llvm-openmp|tbb)\s'
+
+conda install -y "mkl=2024.0.*" "intel-openmp<2024.1" -c conda-forge
+
+python -c "import torch; print(torch.__version__); print(torch.cuda.is_available())"
+```
+
+If that still fails, do a targeted reinstall of the PyTorch stack in the same env:
+
+```bash
+conda activate mouse_sim
+
+conda install -y --force-reinstall \
+  pytorch torchvision torchaudio pytorch-cuda=12.1 \
+  "mkl=2024.0.*" "intel-openmp<2024.1" \
+  -c pytorch -c nvidia -c conda-forge
+
+python -c "import torch; print(torch.__version__); print(torch.cuda.is_available())"
+```
+
+If that also fails, I would stop repairing and recreate the environment. In practice, that is often the cleanest fix once binary packages have drifted:
+
+```bash
+conda create -n mouse_sim_clean python=3.11 -y
+conda activate mouse_sim_clean
+
+conda install -y \
+  numpy scipy pillow tqdm pytables \
+  opencv imageio imageio-ffmpeg \
+  trimesh pyrender pyglet pyopengl \
+  scikit-learn \
+  pytorch torchvision torchaudio pytorch-cuda=12.1 \
+  "mkl=2024.0.*" "intel-openmp<2024.1" \
+  -c pytorch -c nvidia -c conda-forge
+
+pip install xlstm
+
+python -c "import torch; print(torch.__version__); print(torch.cuda.is_available())"
+```
+
+Two practical notes:
+
+First, because the crash is in `libtorch_cpu.so`, this is not evidence that your GPU setup is wrong; PyTorch loads CPU-side libraries first, and it is already failing there. citeturn1search0turn4search5
+
+Second, to prevent this from recurring, pin the fragile binary packages explicitly in `environment.yml`, at least `pytorch`, `torchvision`, `torchaudio`, `pytorch-cuda`, `mkl`, and `intel-openmp`. Your current file pins only Python and `pytorch-cuda`, which leaves the solver a lot of freedom later. fileciteturn0file0
+
+A plausible memory of what fixed the other environment is therefore: you either downgraded MKL / Intel OpenMP, or you rebuilt the environment so those libraries were replaced with a compatible set. That fits this error very well. citeturn1search0turn4search5
+
+Paste me the output of:
+
+```bash
+conda list | egrep '^(pytorch|torchvision|torchaudio|pytorch-cuda|mkl|intel-openmp|llvm-openmp|tbb)\s'
+```
+
+and I’ll tell you which exact repair command is most appropriate.
+
+User: (mouse_sim) hellwich@Artemis:~/hellwich/sdk3/mouseModel/mouse_sim$ conda list | egrep '^(pytorch|torchvision|torchaudio|pytorch-cuda|mkl|intel-openmp|llvm-openmp|tbb)\s'
+llvm-openmp                             22.1.0           h4922eb0_0             conda-forge
+mkl                                     2025.3.0         h0e700b2_463           conda-forge
+pytorch                                 2.0.1            py3.11_cpu_0           pytorch
+pytorch-cuda                            12.1             ha16c6d3_6             pytorch
+tbb                                     2022.3.0         hb700be7_2             conda-forge
+torchaudio                              2.0.2            py311_cpu              pytorch
+(mouse_sim) hellwich@Artemis:~/hellwich/sdk3/mouseModel/mouse_sim$ conda install -y "mkl=2024.0.*" "intel-openmp<2024.1" -c conda-forge
+Retrieving notices: done
+Channels:
+ - conda-forge
+ - defaults
+Platform: linux-64
+Collecting package metadata (repodata.json): done
+Solving environment: failed
+
+LibMambaUnsatisfiableError: Encountered problems while solving:
+  - nothing provides _python_rc needed by python-3.14.0rc2-h4dad89b_0_cp314t
+
+Could not solve for environment specs
+The following packages are incompatible
+├─ intel-openmp <2024.1 * is installable with the potential options
+│  ├─ intel-openmp [2017.0.4|2018.0.0|...|2023.0.0], which can be installed;
+│  └─ intel-openmp 2023.1.0 would require
+│     └─ zlib >=1.2.13,<1.2.14 *, which can be installed;
+├─ mkl =2024.0 * is requested and can be installed;
+├─ pin on python 3.11.* =* * is installable and it requires
+│  └─ python =3.11 *, which can be installed;
+└─ pytables =* * is not installable because there are no viable options
+   ├─ pytables [3.10.1|3.10.2|...|3.9.2] would require
+   │  ├─ numexpr =* * but there are no viable options
+   │  │  ├─ numexpr [2.10.0|2.10.1|...|2.9.0] would require
+   │  │  │  └─ python >=3.10,<3.11.0a0 *, which conflicts with any installable versions previously reported;
+   │  │  ├─ numexpr [2.10.0|2.10.1] would require
+   │  │  │  └─ mkl >=2023.2.0,<2024.0a0 *, which conflicts with any installable versions previously reported;
+   │  │  ├─ numexpr [2.10.0|2.10.1|...|2.9.0] would require
+   │  │  │  └─ python [>=3.12,<3.13.0a0 *|>=3.12.0rc3,<3.13.0a0 *], which conflicts with any installable versions previously reported;
+   │  │  ├─ numexpr [2.10.0|2.10.1|...|2.9.0] would require
+   │  │  │  └─ python >=3.9,<3.10.0a0 *, which conflicts with any installable versions previously reported;
+   │  │  ├─ numexpr [2.10.0|2.10.1|...|2.14.1] would require
+   │  │  │  └─ nomkl =* * but there are no viable options
+   │  │  │     ├─ nomkl 1.0 would require
+   │  │  │     │  └─ mkl <0.0a0 *, which conflicts with any installable versions previously reported;
+   │  │  │     └─ nomkl [2.0|3.0] conflicts with any installable versions previously reported;
+   │  │  ├─ numexpr [2.10.1|2.10.2|...|2.14.1] would require
+   │  │  │  └─ mkl >=2024.2.2,<2025.0a0 *, which conflicts with any installable versions previously reported;
+   │  │  ├─ numexpr [2.10.1|2.10.2|...|2.14.1] would require
+   │  │  │  └─ python >=3.13,<3.14.0a0 *, which conflicts with any installable versions previously reported;
+   │  │  ├─ numexpr 2.13.1 would require
+   │  │  │  └─ python >=3.14.0rc3,<3.15.0a0 * but there are no viable options
+   │  │  │     ├─ python [3.14.0|3.14.1|3.14.2|3.14.3] conflicts with any installable versions previously reported;
+   │  │  │     └─ python [3.14.0rc2|3.14.0rc3] would require
+   │  │  │        └─ _python_rc =* *, which does not exist (perhaps a missing channel);
+   │  │  ├─ numexpr [2.14.0|2.14.1] would require
+   │  │  │  └─ python >=3.14,<3.15.0a0 *, which conflicts with any installable versions previously reported;
+   │  │  ├─ numexpr 2.14.1 would require
+   │  │  │  └─ mkl >=2025.3.0,<2026.0a0 * but there are no viable options
+   │  │  │     ├─ mkl 2025.3.0 would require
+   │  │  │     │  └─ llvm-openmp [>=21.1.4 *|>=21.1.8 *] but there are no viable options
+   │  │  │     │     ├─ llvm-openmp [21.1.4|21.1.5|...|22.1.2] would require
+   │  │  │     │     │  └─ intel-openmp <0.0a0 *, which conflicts with any installable versions previously reported;
+   │  │  │     │     └─ llvm-openmp 21.1.8 conflicts with any installable versions previously reported;
+   │  │  │     └─ mkl 2025.3.1 would require
+   │  │  │        └─ llvm-openmp >=22.1.1 *, which cannot be installed (as previously explained);
+   │  │  ├─ numexpr [2.8.4|2.8.7] would require
+   │  │  │  ├─ mkl >=2022.2.1,<2023.0a0 *, which conflicts with any installable versions previously reported;
+   │  │  │  └─ numpy >=1.23.5,<2.0a0 * with the potential options
+   │  │  │     ├─ numpy [1.23.4|1.23.5|...|2.2.6] would require
+   │  │  │     │  └─ python >=3.10,<3.11.0a0 *, which conflicts with any installable versions previously reported;
+   │  │  │     ├─ numpy [1.26.0|1.26.2|...|2.3.2] would require
+   │  │  │     │  └─ python [>=3.12,<3.13.0a0 *|>=3.12.0rc3,<3.13.0a0 *], which conflicts with any installable versions previously reported;
+   │  │  │     ├─ numpy [1.23.4|1.23.5|...|2.0.2] would require
+   │  │  │     │  └─ python >=3.9,<3.10.0a0 *, which conflicts with any installable versions previously reported;
+   │  │  │     ├─ numpy [1.23.5|1.24.0|...|1.26.4], which can be installed;
+   │  │  │     └─ numpy [1.23.4|1.23.5|...|1.24.4] would require
+   │  │  │        └─ python >=3.8,<3.9.0a0 *, which conflicts with any installable versions previously reported;
+   │  │  ├─ numexpr [2.7.0|2.7.1|...|2.8.4] would require
+   │  │  │  └─ python >=3.8,<3.9.0a0 *, which conflicts with any installable versions previously reported;
+   │  │  ├─ numexpr [2.8.4|2.8.7|2.8.8|2.9.0] would require
+   │  │  │  ├─ nomkl =* * but there are no viable options
+   │  │  │  │  ├─ nomkl 1.0, which cannot be installed (as previously explained);
+   │  │  │  │  └─ nomkl [2.0|3.0] conflicts with any installable versions previously reported;
+   │  │  │  └─ numpy >=1.23.5,<2.0a0 * with the potential options
+   │  │  │     ├─ numpy [1.23.4|1.23.5|...|2.2.6], which cannot be installed (as previously explained);
+   │  │  │     ├─ numpy [1.26.0|1.26.2|...|2.3.2], which cannot be installed (as previously explained);
+   │  │  │     ├─ numpy [1.23.4|1.23.5|...|2.0.2], which cannot be installed (as previously explained);
+   │  │  │     ├─ numpy [1.23.5|1.24.0|...|1.26.4], which can be installed;
+   │  │  │     └─ numpy [1.23.4|1.23.5|...|1.24.4], which cannot be installed (as previously explained);
+   │  │  ├─ numexpr [2.8.7|2.8.8|2.9.0] would require
+   │  │  │  ├─ mkl >=2023.2.0,<2024.0a0 *, which conflicts with any installable versions previously reported;
+   │  │  │  └─ numpy >=1.23.5,<2.0a0 * with the potential options
+   │  │  │     ├─ numpy [1.23.4|1.23.5|...|2.2.6], which cannot be installed (as previously explained);
+   │  │  │     ├─ numpy [1.26.0|1.26.2|...|2.3.2], which cannot be installed (as previously explained);
+   │  │  │     ├─ numpy [1.23.4|1.23.5|...|2.0.2], which cannot be installed (as previously explained);
+   │  │  │     ├─ numpy [1.23.5|1.24.0|...|1.26.4], which can be installed;
+   │  │  │     └─ numpy [1.23.4|1.23.5|...|1.24.4], which cannot be installed (as previously explained);
+   │  │  ├─ numexpr [2.6.1|2.6.2|...|2.7.1] would require
+   │  │  │  └─ python [=2.7 *|>=2.7,<2.8.0a0 *], which conflicts with any installable versions previously reported;
+   │  │  ├─ numexpr 2.6.1 would require
+   │  │  │  └─ python =3.4 *, which conflicts with any installable versions previously reported;
+   │  │  ├─ numexpr [2.6.1|2.6.2|2.6.4|2.6.5|2.6.6] would require
+   │  │  │  └─ python [=3.5 *|>=3.5,<3.6.0a0 *], which conflicts with any installable versions previously reported;
+   │  │  ├─ numexpr [2.6.1|2.6.2|2.6.4] would require
+   │  │  │  └─ python =3.6 *, which conflicts with any installable versions previously reported;
+   │  │  ├─ numexpr [2.6.5|2.6.6|...|2.7.3] would require
+   │  │  │  └─ python >=3.6,<3.7.0a0 *, which conflicts with any installable versions previously reported;
+   │  │  ├─ numexpr [2.6.8|2.6.9|...|2.8.3] would require
+   │  │  │  └─ python >=3.7,<3.8.0a0 *, which conflicts with any installable versions previously reported;
+   │  │  ├─ numexpr 2.8.3 would require
+   │  │  │  ├─ mkl >=2022.1.0,<2023.0a0 *, which conflicts with any installable versions previously reported;
+   │  │  │  └─ numpy >=1.23.4,<2.0a0 * with the potential options
+   │  │  │     ├─ numpy [1.23.4|1.23.5|...|2.2.6], which cannot be installed (as previously explained);
+   │  │  │     ├─ numpy [1.26.0|1.26.2|...|2.3.2], which cannot be installed (as previously explained);
+   │  │  │     ├─ numpy [1.23.4|1.23.5|...|2.0.2], which cannot be installed (as previously explained);
+   │  │  │     ├─ numpy [1.23.5|1.24.0|...|1.26.4], which can be installed;
+   │  │  │     ├─ numpy [1.23.4|1.23.5|...|1.24.4], which cannot be installed (as previously explained);
+   │  │  │     └─ numpy 1.23.4, which can be installed;
+   │  │  ├─ numexpr 2.8.3 would require
+   │  │  │  ├─ nomkl =* * but there are no viable options
+   │  │  │  │  ├─ nomkl 1.0, which cannot be installed (as previously explained);
+   │  │  │  │  └─ nomkl [2.0|3.0] conflicts with any installable versions previously reported;
+   │  │  │  └─ numpy >=1.23.4,<2.0a0 * with the potential options
+   │  │  │     ├─ numpy [1.23.4|1.23.5|...|2.2.6], which cannot be installed (as previously explained);
+   │  │  │     ├─ numpy [1.26.0|1.26.2|...|2.3.2], which cannot be installed (as previously explained);
+   │  │  │     ├─ numpy [1.23.4|1.23.5|...|2.0.2], which cannot be installed (as previously explained);
+   │  │  │     ├─ numpy [1.23.5|1.24.0|...|1.26.4], which can be installed;
+   │  │  │     ├─ numpy [1.23.4|1.23.5|...|1.24.4], which cannot be installed (as previously explained);
+   │  │  │     └─ numpy 1.23.4, which can be installed;
+   │  │  └─ numexpr [2.10.1|2.11.0|...|2.8.7] conflicts with any installable versions previously reported;
+   │  └─ numpy >=1.23.4,<2.0a0 * with the potential options
+   │     ├─ numpy [1.23.4|1.23.5|...|2.2.6], which cannot be installed (as previously explained);
+   │     ├─ numpy [1.26.0|1.26.2|...|2.3.2], which cannot be installed (as previously explained);
+   │     ├─ numpy [1.23.4|1.23.5|...|2.0.2], which cannot be installed (as previously explained);
+   │     ├─ numpy [1.23.5|1.24.0|...|1.26.4], which can be installed;
+   │     ├─ numpy [1.23.4|1.23.5|...|1.24.4], which cannot be installed (as previously explained);
+   │     └─ numpy 1.23.4, which can be installed;
+   ├─ pytables [3.10.1|3.6.1|...|3.9.2] would require
+   │  └─ python >=3.10,<3.11.0a0 *, which conflicts with any installable versions previously reported;
+   ├─ pytables 3.10.1 would require
+   │  ├─ numexpr =* * but there are no viable options
+   │  │  ├─ numexpr [2.10.0|2.10.1|...|2.9.0], which cannot be installed (as previously explained);
+   │  │  ├─ numexpr [2.10.0|2.10.1], which cannot be installed (as previously explained);
+   │  │  ├─ numexpr [2.10.0|2.10.1|...|2.9.0], which cannot be installed (as previously explained);
+   │  │  ├─ numexpr [2.10.0|2.10.1|...|2.9.0], which cannot be installed (as previously explained);
+   │  │  ├─ numexpr [2.10.0|2.10.1|...|2.14.1], which cannot be installed (as previously explained);
+   │  │  ├─ numexpr [2.10.1|2.10.2|...|2.14.1], which cannot be installed (as previously explained);
+   │  │  ├─ numexpr [2.10.1|2.10.2|...|2.14.1], which cannot be installed (as previously explained);
+   │  │  ├─ numexpr 2.13.1, which cannot be installed (as previously explained);
+   │  │  ├─ numexpr [2.14.0|2.14.1], which cannot be installed (as previously explained);
+   │  │  ├─ numexpr 2.14.1, which cannot be installed (as previously explained);
+   │  │  ├─ numexpr [2.8.4|2.8.7], which cannot be installed (as previously explained);
+   │  │  ├─ numexpr [2.7.0|2.7.1|...|2.8.4], which cannot be installed (as previously explained);
+   │  │  ├─ numexpr [2.8.4|2.8.7|2.8.8|2.9.0], which cannot be installed (as previously explained);
+   │  │  ├─ numexpr [2.8.7|2.8.8|2.9.0], which cannot be installed (as previously explained);
+   │  │  ├─ numexpr [2.6.1|2.6.2|...|2.7.1], which cannot be installed (as previously explained);
+   │  │  ├─ numexpr 2.6.1, which cannot be installed (as previously explained);
+   │  │  ├─ numexpr [2.6.1|2.6.2|2.6.4|2.6.5|2.6.6], which cannot be installed (as previously explained);
+   │  │  ├─ numexpr [2.6.1|2.6.2|2.6.4], which cannot be installed (as previously explained);
+   │  │  ├─ numexpr [2.6.5|2.6.6|...|2.7.3], which cannot be installed (as previously explained);
+   │  │  ├─ numexpr [2.6.8|2.6.9|...|2.8.3], which cannot be installed (as previously explained);
+   │  │  ├─ numexpr 2.8.3, which cannot be installed (as previously explained);
+   │  │  ├─ numexpr 2.8.3, which cannot be installed (as previously explained);
+   │  │  └─ numexpr [2.10.1|2.11.0|...|2.8.7] conflicts with any installable versions previously reported;
+   │  ├─ numpy >=2.0.1,<3.0a0 * but there are no viable options
+   │  │  ├─ numpy [1.23.4|1.23.5|...|2.2.6], which cannot be installed (as previously explained);
+   │  │  ├─ numpy [2.0.1|2.0.2|...|2.4.4] conflicts with any installable versions previously reported;
+   │  │  ├─ numpy [1.26.0|1.26.2|...|2.3.2], which cannot be installed (as previously explained);
+   │  │  ├─ numpy [1.23.4|1.23.5|...|2.0.2], which cannot be installed (as previously explained);
+   │  │  ├─ numpy [2.1.0|2.1.1|...|2.3.2] would require
+   │  │  │  └─ python [>=3.13,<3.14.0a0 *|>=3.13.0rc1,<3.14.0a0 *|>=3.13.0rc3,<3.14.0a0 *], which conflicts with any installable versions previously reported;
+   │  │  ├─ numpy 2.3.2 would require
+   │  │  │  └─ python >=3.14.0rc2,<3.15.0a0 * but there are no viable options
+   │  │  │     ├─ python [3.14.0|3.14.1|3.14.2|3.14.3] conflicts with any installable versions previously reported;
+   │  │  │     └─ python [3.14.0rc2|3.14.0rc3], which cannot be installed (as previously explained);
+   │  │  ├─ numpy [2.3.2|2.3.3|...|2.4.3] would require
+   │  │  │  └─ python_abi =3.14 *_cp314, which can be installed;
+   │  │  └─ numpy [2.3.2|2.3.3|...|2.4.3] would require
+   │  │     └─ python_abi =3.14 *_cp314t, which can be installed;
+   │  └─ python_abi =3.11 *_cp311, which conflicts with any installable versions previously reported;
+   ├─ pytables [3.10.1|3.10.2|...|3.9.2] would require
+   │  └─ python [>=3.12,<3.13.0a0 *|>=3.12.0rc3,<3.13.0a0 *], which conflicts with any installable versions previously reported;
+   ├─ pytables [3.10.1|3.10.2|3.11.0|3.11.1] would require
+   │  └─ python >=3.13,<3.14.0a0 *, which conflicts with any installable versions previously reported;
+   ├─ pytables [3.10.2|3.11.0|3.11.1] would require
+   │  └─ python >=3.14,<3.15.0a0 *, which conflicts with any installable versions previously reported;
+   ├─ pytables 3.10.2 would require
+   │  └─ python >=3.14.0rc3,<3.15.0a0 * but there are no viable options
+   │     ├─ python [3.14.0|3.14.1|3.14.2|3.14.3] conflicts with any installable versions previously reported;
+   │     └─ python [3.14.0rc2|3.14.0rc3], which cannot be installed (as previously explained);
+   ├─ pytables 3.11.1 would require
+   │  ├─ libzlib >=1.3.2,<2.0a0 *, which requires
+   │  │  └─ zlib ==1.3.2 *_2, which conflicts with any installable versions previously reported;
+   │  └─ numexpr =* * but there are no viable options
+   │     ├─ numexpr [2.10.0|2.10.1|...|2.9.0], which cannot be installed (as previously explained);
+   │     ├─ numexpr [2.10.0|2.10.1], which cannot be installed (as previously explained);
+   │     ├─ numexpr [2.10.0|2.10.1|...|2.9.0], which cannot be installed (as previously explained);
+   │     ├─ numexpr [2.10.0|2.10.1|...|2.9.0], which cannot be installed (as previously explained);
+   │     ├─ numexpr [2.10.0|2.10.1|...|2.14.1], which cannot be installed (as previously explained);
+   │     ├─ numexpr [2.10.1|2.10.2|...|2.14.1], which cannot be installed (as previously explained);
+   │     ├─ numexpr [2.10.1|2.10.2|...|2.14.1], which cannot be installed (as previously explained);
+   │     ├─ numexpr 2.13.1, which cannot be installed (as previously explained);
+   │     ├─ numexpr [2.14.0|2.14.1], which cannot be installed (as previously explained);
+   │     ├─ numexpr 2.14.1, which cannot be installed (as previously explained);
+   │     ├─ numexpr [2.8.4|2.8.7], which cannot be installed (as previously explained);
+   │     ├─ numexpr [2.7.0|2.7.1|...|2.8.4], which cannot be installed (as previously explained);
+   │     ├─ numexpr [2.8.4|2.8.7|2.8.8|2.9.0], which cannot be installed (as previously explained);
+   │     ├─ numexpr [2.8.7|2.8.8|2.9.0], which cannot be installed (as previously explained);
+   │     ├─ numexpr [2.6.1|2.6.2|...|2.7.1], which cannot be installed (as previously explained);
+   │     ├─ numexpr 2.6.1, which cannot be installed (as previously explained);
+   │     ├─ numexpr [2.6.1|2.6.2|2.6.4|2.6.5|2.6.6], which cannot be installed (as previously explained);
+   │     ├─ numexpr [2.6.1|2.6.2|2.6.4], which cannot be installed (as previously explained);
+   │     ├─ numexpr [2.6.5|2.6.6|...|2.7.3], which cannot be installed (as previously explained);
+   │     ├─ numexpr [2.6.8|2.6.9|...|2.8.3], which cannot be installed (as previously explained);
+   │     ├─ numexpr 2.8.3, which cannot be installed (as previously explained);
+   │     ├─ numexpr 2.8.3, which cannot be installed (as previously explained);
+   │     └─ numexpr [2.10.1|2.11.0|...|2.8.7] conflicts with any installable versions previously reported;
+   ├─ pytables [3.6.1|3.7.0|3.8.0] would require
+   │  └─ python >=3.8,<3.9.0a0 *, which conflicts with any installable versions previously reported;
+   ├─ pytables [3.6.1|3.7.0|3.8.0|3.9.1|3.9.2] would require
+   │  └─ python >=3.9,<3.10.0a0 *, which conflicts with any installable versions previously reported;
+   ├─ pytables [3.2.3.1|3.3.0|...|3.5.2] would require
+   │  └─ python [=2.7 *|>=2.7,<2.8.0a0 *], which conflicts with any installable versions previously reported;
+   ├─ pytables [3.2.3.1|3.3.0] would require
+   │  └─ python =3.4 *, which conflicts with any installable versions previously reported;
+   ├─ pytables [3.2.3.1|3.3.0|3.4.2|3.4.3|3.4.4] would require
+   │  └─ python [=3.5 *|>=3.5,<3.6.0a0 *], which conflicts with any installable versions previously reported;
+   ├─ pytables [3.3.0|3.4.2|3.4.3|3.4.4] would require
+   │  └─ python =3.6 *, which conflicts with any installable versions previously reported;
+   ├─ pytables [3.4.1|3.4.2] would require
+   │  └─ lzo ==2.6 *, which does not exist (perhaps a missing channel);
+   ├─ pytables [3.4.4|3.5.0|...|3.6.1] would require
+   │  └─ python >=3.6,<3.7.0a0 *, which conflicts with any installable versions previously reported;
+   ├─ pytables [3.4.4|3.5.0|...|3.7.0] would require
+   │  └─ python >=3.7,<3.8.0a0 *, which conflicts with any installable versions previously reported;
+   └─ pytables [3.10.1|3.10.2|...|3.9.2] conflicts with any installable versions previously reported.
+
+Pins seem to be involved in the conflict. Currently pinned specs:
+ - python=3.11
+
+
+(mouse_sim) hellwich@Artemis:~/hellwich/sdk3/mouseModel/mouse_sim$ conda install -y --force-reinstall \
+  pytorch torchvision torchaudio pytorch-cuda=12.1 \
+  "mkl=2024.0.*" "intel-openmp<2024.1" \
+  -c pytorch -c nvidia -c conda-forge
+Retrieving notices: done
+Channels:
+ - pytorch
+ - nvidia
+ - conda-forge
+ - defaults
+Platform: linux-64
+Collecting package metadata (repodata.json): done
+Solving environment: - 
+
+The second conda install does not finish - even after minutes.
+
+Assistant: Your package list already shows two concrete problems: `pytorch 2.0.1 py3.11_cpu_0` is a CPU build, and it sits next to `pytorch-cuda 12.1`; that mismatch should not happen in a clean GPU install. I’m checking the best low-risk repair that avoids the solver trap you just hit.
+
+Assistant: I’ve got the decisive piece now: your environment is not just “slightly off”; it is internally inconsistent. The cleanest explanation is that later installs let Conda swap in a CPU PyTorch build while retaining `pytorch-cuda=12.1`, and at the same time your MKL/OpenMP runtime moved to a newer combination that PyTorch 2.0.1 is known to dislike.
+
+Assistant: Yes. Your environment has almost certainly been mutated into an inconsistent binary stack.
+
+The decisive clues are these:
+
+`predict_behavior_pair_xlstm.py` fails immediately at `import torch`, so the failure is below your script and below your input files. fileciteturn0file1  
+Your protocol shows that the pair-training/prediction workflow did work earlier in this project, including the `out_pair_train2` path, so this is not naturally explained by the checkpoint or CSVs suddenly becoming invalid. fileciteturn0file2
+
+Your current package state is already contradictory:
+
+- `pytorch 2.0.1 py3.11_cpu_0`
+- `pytorch-cuda 12.1`
+- `mkl 2025.3.0`
+- `llvm-openmp 22.1.0`
+
+That means Conda has given you a **CPU build of PyTorch** while also leaving a **CUDA runtime metapackage** installed. On top of that, PyTorch 2.0.1 is old enough that the newer MKL/OpenMP combination is a known source of the exact `iJIT_NotifyEvent` import failure. citeturn0search0turn0search1
+
+There is a second inconsistency: PyTorch’s official “previous versions” page shows that **PyTorch 2.0.1 on Conda was published for CUDA 11.7 and 11.8, not CUDA 12.1**. CUDA 12.1 Conda installs appear with newer PyTorch releases such as 2.1.x and 2.2.x. So your current `pytorch 2.0.1` + `pytorch-cuda 12.1` combination is not a clean supported pairing. citeturn3view2turn3view1
+
+So what likely happened is: after the environment was created from your `environment.yml`, one or more later installs or updates let Conda re-solve the environment across mixed channels (`pytorch`, `nvidia`, `conda-forge`), and it quietly replaced the original torch stack with a CPU build while also updating MKL/OpenMP. Your YAML leaves most of those low-level binaries unpinned, so that kind of drift is entirely plausible. Conda itself recommends strict channel priority because it reduces this kind of incompatibility and also speeds solving. fileciteturn0file0 citeturn1search1turn1search3turn1search5
+
+The reason your attempted repair hangs or explodes is also consistent with that diagnosis: you are trying to downgrade MKL inside a now-fragile mixed environment, and packages such as `pytables` / `numexpr` drag the solver into a very large constraint graph. The `_python_rc` noise is solver fallout, not the root cause. citeturn1search7turn4search0
+
+What I would do now is **stop repairing this environment in place**. Recreating it is the cleaner move.
+
+Use this for a fresh environment that keeps your original CUDA 12.1 intent, but pins a consistent PyTorch stack:
+
+```bash
+conda create -n mouse_sim_fix python=3.11 pip -y
+conda activate mouse_sim_fix
+
+conda install -y \
+  numpy scipy pillow tqdm \
+  opencv imageio imageio-ffmpeg \
+  trimesh pyrender pyglet pyopengl \
+  scikit-learn \
+  pytorch=2.2.2 torchvision=0.17.2 torchaudio=2.2.2 pytorch-cuda=12.1 \
+  -c pytorch -c nvidia -c conda-forge --strict-channel-priority
+
+pip install xlstm
+
+python -c "import torch; print(torch.__version__); print(torch.version.cuda); print(torch.cuda.is_available())"
+```
+
+I intentionally left out `pytables` there, because your failing prediction script does not need it, and it is part of the constraint mess. Add it later only if another script actually requires it. Your current `environment.yml` includes it, but `predict_behavior_pair_xlstm.py` itself does not use it. fileciteturn0file0turn0file1
+
+If you want the most conservative route relative to older PyTorch binaries, use the officially supported 2.0.1 pairing instead:
+
+```bash
+conda create -n mouse_sim_201 python=3.11 pip -y
+conda activate mouse_sim_201
+
+conda install -y \
+  numpy scipy pillow tqdm \
+  opencv imageio imageio-ffmpeg \
+  trimesh pyrender pyglet pyopengl \
+  scikit-learn \
+  pytorch=2.0.1 torchvision=0.15.2 torchaudio=2.0.2 pytorch-cuda=11.8 \
+  -c pytorch -c nvidia -c conda-forge --strict-channel-priority
+
+pip install xlstm
+
+python -c "import torch; print(torch.__version__); print(torch.version.cuda); print(torch.cuda.is_available())"
+```
+
+That second option matches the official supported pairing for PyTorch 2.0.1 better than your current env does. citeturn3view2
+
+Forensics-wise, if you want to see exactly when the environment drifted, run:
+
+```bash
+conda list --revisions
+```
+
+Conda keeps a revision history for environments, so that will usually reveal which install/update step changed the torch stack. citeturn4search3
+
+My bottom line: the most likely thing that “happened” is not a bug in your code. It is that the environment was re-solved later, and the new solve produced an unsupported combination: **CPU PyTorch 2.0.1 + CUDA 12.1 metapackage + newer MKL/OpenMP**. That combination is exactly the sort of state that yields `libtorch_cpu.so: undefined symbol: iJIT_NotifyEvent`. citeturn0search0turn3view2turn3view1
+
+If you paste the output of `conda list --revisions`, I can pinpoint which revision likely broke it.
+
+User: Continuously fails. This is what I did:
+
+(base) hellwich@Artemis:~/hellwich/sdk3$ cd mouseModel/mouse_sim/
+(base) hellwich@Artemis:~/hellwich/sdk3/mouseModel/mouse_sim$ conda create -n mouse_sim_fix python=3.11 pip -y
+Channels:
+ - conda-forge
+ - defaults
+Platform: linux-64
+Collecting package metadata (repodata.json): done
+Solving environment: done
+
+
+==> WARNING: A newer version of conda exists. <==
+    current version: 25.7.0
+    latest version: 26.3.1
+
+Please update conda by running
+
+    $ conda update -n base -c defaults conda
+
+
+
+## Package Plan ##
+
+  environment location: /home/hellwich/anaconda3/envs/mouse_sim_fix
+
+  added / updated specs:
+    - pip
+    - python=3.11
+
+
+The following packages will be downloaded:
+
+    package                    |            build
+    ---------------------------|-----------------
+    icu-78.3                   |       h33c6efd_0        12.1 MB  conda-forge
+    ld_impl_linux-64-2.45.1    |default_hbd61a6d_102         711 KB  conda-forge
+    libexpat-2.7.5             |       hecca717_0          75 KB  conda-forge
+    libuuid-2.42               |       h5347b49_0          39 KB  conda-forge
+    libzlib-1.3.2              |       h25fd6f3_2          62 KB  conda-forge
+    setuptools-82.0.1          |     pyh332efcf_0         625 KB  conda-forge
+    ------------------------------------------------------------
+                                           Total:        13.6 MB
+
+The following NEW packages will be INSTALLED:
+
+  _openmp_mutex      conda-forge/linux-64::_openmp_mutex-4.5-20_gnu 
+  bzip2              conda-forge/linux-64::bzip2-1.0.8-hda65f42_9 
+  ca-certificates    conda-forge/noarch::ca-certificates-2026.2.25-hbd8a1cb_0 
+  icu                conda-forge/linux-64::icu-78.3-h33c6efd_0 
+  ld_impl_linux-64   conda-forge/linux-64::ld_impl_linux-64-2.45.1-default_hbd61a6d_102 
+  libexpat           conda-forge/linux-64::libexpat-2.7.5-hecca717_0 
+  libffi             conda-forge/linux-64::libffi-3.5.2-h3435931_0 
+  libgcc             conda-forge/linux-64::libgcc-15.2.0-he0feb66_18 
+  libgcc-ng          conda-forge/linux-64::libgcc-ng-15.2.0-h69a702a_18 
+  libgomp            conda-forge/linux-64::libgomp-15.2.0-he0feb66_18 
+  liblzma            conda-forge/linux-64::liblzma-5.8.2-hb03c661_0 
+  libnsl             conda-forge/linux-64::libnsl-2.0.1-hb9d3cd8_1 
+  libsqlite          conda-forge/linux-64::libsqlite-3.52.0-hf4e2dac_0 
+  libstdcxx          conda-forge/linux-64::libstdcxx-15.2.0-h934c35e_18 
+  libuuid            conda-forge/linux-64::libuuid-2.42-h5347b49_0 
+  libxcrypt          conda-forge/linux-64::libxcrypt-4.4.36-hd590300_1 
+  libzlib            conda-forge/linux-64::libzlib-1.3.2-h25fd6f3_2 
+  ncurses            conda-forge/linux-64::ncurses-6.5-h2d0b736_3 
+  openssl            conda-forge/linux-64::openssl-3.6.1-h35e630c_1 
+  packaging          conda-forge/noarch::packaging-26.0-pyhcf101f3_0 
+  pip                conda-forge/noarch::pip-26.0.1-pyh8b19718_0 
+  python             conda-forge/linux-64::python-3.11.15-hd63d673_0_cpython 
+  readline           conda-forge/linux-64::readline-8.3-h853b02a_0 
+  setuptools         conda-forge/noarch::setuptools-82.0.1-pyh332efcf_0 
+  tk                 conda-forge/linux-64::tk-8.6.13-noxft_h366c992_103 
+  tzdata             conda-forge/noarch::tzdata-2025c-hc9c84f9_1 
+  wheel              conda-forge/noarch::wheel-0.46.3-pyhd8ed1ab_0 
+  zstd               conda-forge/linux-64::zstd-1.5.7-hb78ec9c_6 
+
+
+
+Downloading and Extracting Packages:
+                                                                                                                                                            
+Preparing transaction: done                                                                                                                                 
+Verifying transaction: done                                                                                                                                 
+Executing transaction: done                                                                                                                                 
+#                                                                                                                                                           
+# To activate this environment, use                                                                                                                         
+#
+#     $ conda activate mouse_sim_fix
+#
+# To deactivate an active environment, use
+#
+#     $ conda deactivate
+
+(base) hellwich@Artemis:~/hellwich/sdk3/mouseModel/mouse_sim$ conda update -n base -c defaults conda
+Channels:
+ - defaults
+ - conda-forge
+Platform: linux-64
+Collecting package metadata (repodata.json): done
+Solving environment: done
+
+
+==> WARNING: A newer version of conda exists. <==
+    current version: 25.7.0
+    latest version: 26.3.1
+
+Please update conda by running
+
+    $ conda update -n base -c defaults conda
+
+
+
+## Package Plan ##
+
+  environment location: /home/hellwich/anaconda3
+
+  added / updated specs:
+    - conda
+
+
+The following packages will be downloaded:
+
+    package                    |            build
+    ---------------------------|-----------------
+    ca-certificates-2026.3.19  |       h06a4308_0         126 KB
+    ------------------------------------------------------------
+                                           Total:         126 KB
+
+The following NEW packages will be INSTALLED:
+
+  libgcc             pkgs/main/linux-64::libgcc-15.2.0-h69a1729_7 
+
+The following packages will be UPDATED:
+
+  ca-certificates    conda-forge/noarch::ca-certificates-2~ --> pkgs/main/linux-64::ca-certificates-2026.3.19-h06a4308_0 
+  libgcc-ng                               11.2.0-h1234567_1 --> 15.2.0-h166f726_7 
+  libgomp                                 11.2.0-h1234567_1 --> 15.2.0-h4751f2c_7 
+  openssl                                 3.0.18-hd6dcaed_0 --> 3.5.5-h1b28b03_0 
+
+
+Proceed ([y]/n)? y
+
+
+Downloading and Extracting Packages:
+                                                                                                                                                            
+Preparing transaction: done
+Verifying transaction: done
+Executing transaction: done
+(base) hellwich@Artemis:~/hellwich/sdk3/mouseModel/mouse_sim$ conda activate mouse_sim_fix
+(mouse_sim_fix) hellwich@Artemis:~/hellwich/sdk3/mouseModel/mouse_sim$ conda install -y \
+  numpy scipy pillow tqdm \
+  opencv imageio imageio-ffmpeg \
+  trimesh pyrender pyglet pyopengl \
+  scikit-learn \
+  pytorch=2.2.2 torchvision=0.17.2 torchaudio=2.2.2 pytorch-cuda=12.1 \
+  -c pytorch -c nvidia -c conda-forge --strict-channel-priority
+Channels:
+ - pytorch
+ - nvidia
+ - conda-forge
+ - defaults
+Platform: linux-64
+Collecting package metadata (repodata.json): done
+Solving environment: failed
+
+LibMambaUnsatisfiableError: Encountered problems while solving:
+  - nothing provides libopencv 4.2.0 py36_5 needed by opencv-4.2.0-py36_5
+
+Could not solve for environment specs
+The following packages are incompatible
+├─ opencv =* * is installable with the potential options
+│  ├─ opencv [4.10.0|4.11.0] would require
+│  │  └─ libopencv [==4.10.0 headless_py310h05fcec3_10|==4.10.0 headless_py310h2251c23_11|...|==4.11.0 qt6_py39hd96f159_602], which requires
+│  │     └─ ffmpeg >=7.1.0,<8.0a0 *, which conflicts with any installable versions previously reported;
+│  ├─ opencv [4.10.0|4.9.0] would require
+│  │  └─ libopencv [==4.10.0 headless_py310h3d4b477_1|==4.10.0 headless_py310hef7d0a5_0|...|==4.9.0 qt6_py39hed63795_614], which requires
+│  │     └─ ffmpeg >=6.1.1,<7.0a0 *, which conflicts with any installable versions previously reported;
+│  ├─ opencv 4.10.0 would require
+│  │  └─ libopencv [==4.10.0 headless_py310h8d94708_2|==4.10.0 headless_py38h5642e36_2|...|==4.10.0 qt6_py39hfd9fb6d_602], which requires
+│  │     └─ ffmpeg >=7.0.1,<8.0a0 *, which conflicts with any installable versions previously reported;
+│  ├─ opencv 4.10.0 would require
+│  │  └─ libopencv [==4.10.0 headless_py310h5bfabb9_4|==4.10.0 headless_py310h5bfabb9_5|...|==4.10.0 qt6_py39hdeb11db_605], which requires
+│  │     └─ ffmpeg >=6.1.2,<7.0a0 *, which conflicts with any installable versions previously reported;
+│  ├─ opencv 4.10.0 would require
+│  │  └─ libopencv [==4.10.0 headless_py311h63eac36_5|==4.10.0 headless_py311h63eac36_6|...|==4.10.0 qt6_py39h5d2977a_603], which requires
+│  │     └─ ffmpeg >=7.0.2,<8.0a0 *, which conflicts with any installable versions previously reported;
+│  ├─ opencv [4.11.0|4.12.0] would require
+│  │  └─ libopencv [==4.11.0 headless_py310h52fee8e_8|==4.11.0 headless_py310h52fee8e_9|...|==4.12.0 qt6_py39h9803dda_602], which requires
+│  │     └─ ffmpeg >=7.1.1,<8.0a0 *, which conflicts with any installable versions previously reported;
+│  ├─ opencv [4.12.0|4.13.0] would require
+│  │  └─ libopencv [==4.12.0 headless_py310h3b6986b_10|==4.12.0 headless_py310h7023d67_12|...|==4.13.0 qt6_py314h7a1be47_601], which requires
+│  │     └─ ffmpeg >=8.0.1,<9.0a0 *, which conflicts with any installable versions previously reported;
+│  ├─ opencv 4.12.0 would require
+│  │  └─ libopencv [==4.12.0 headless_py310h3b6986b_8|==4.12.0 headless_py310h3b6986b_9|...|==4.12.0 qt6_py313hee252e0_607], which requires
+│  │     └─ ffmpeg >=8.0.0,<9.0a0 *, which conflicts with any installable versions previously reported;
+│  ├─ opencv [4.5.3|4.5.5|4.6.0] would require
+│  │  └─ libopencv [==4.5.3 py310hc72b5f5_8|==4.5.3 py38hc6b509d_8|...|==4.6.0 py39hf4bb9d8_2], which requires
+│  │     └─ ffmpeg >=4.4.2,<5.0a0 *, which conflicts with any installable versions previously reported;
+│  ├─ opencv [4.6.0|4.7.0] would require
+│  │  └─ libopencv [==4.6.0 py310h5bd1119_9|==4.6.0 py310h6214075_5|...|==4.7.0 py39hf99ad11_5], which requires
+│  │     └─ ffmpeg >=5.1.2,<6.0a0 *, which conflicts with any installable versions previously reported;
+│  ├─ opencv [4.7.0|4.8.0|4.8.1] would require
+│  │  └─ libopencv [==4.7.0 py310h245f934_4|==4.7.0 py310h3e876cf_5|...|==4.8.1 py39hf605482_5], which requires
+│  │     └─ ffmpeg >=6.0.0,<7.0a0 *, which conflicts with any installable versions previously reported;
+│  ├─ opencv 4.9.0 would require
+│  │  └─ libopencv [==4.9.0 headless_py310hae237af_14|==4.9.0 headless_py38h0f7b093_14|...|==4.9.0 qt6_py39h067c833_615], which requires
+│  │     └─ ffmpeg >=7.0.0,<8.0a0 *, which conflicts with any installable versions previously reported;
+│  ├─ opencv [2.4.12|2.4.13|3.1.0|3.2.0] would require
+│  │  └─ python =2.7 *, which can be installed;
+│  ├─ opencv [2.4.13.4|3.2.0|3.3.0|3.4.1] would require
+│  │  └─ ffmpeg >=3.2.3,<3.2.6 *, which conflicts with any installable versions previously reported;
+│  ├─ opencv 3.1.0 would require
+│  │  └─ python =3.4 *, which can be installed;
+│  ├─ opencv [3.1.0|3.2.0] would require
+│  │  └─ python =3.5 *, which can be installed;
+│  ├─ opencv [3.1.0|3.2.0] would require
+│  │  └─ python =3.6 *, which can be installed;
+│  ├─ opencv [3.4.1|3.4.3|3.4.4|3.4.7] would require
+│  │  ├─ ffmpeg >=4.0.2,<4.1.0a0 *, which conflicts with any installable versions previously reported;
+│  │  └─ libopencv ==3.4.7 hc173e35_5, which requires
+│  │     └─ ffmpeg >=4.0.2,<4.1.0a0 *, which conflicts with any installable versions previously reported;
+│  ├─ opencv 3.4.1 would require
+│  │  └─ ffmpeg >=4.0.1,<4.1.0a0 *, which conflicts with any installable versions previously reported;
+│  ├─ opencv [3.4.4|3.4.7|...|4.1.1] would require
+│  │  ├─ ffmpeg =4.1 *, which conflicts with any installable versions previously reported;
+│  │  └─ libopencv [==3.4.7 h0cc45ee_4|==4.1.1 h0cc45ee_3], which requires
+│  │     └─ ffmpeg =4.1 *, which conflicts with any installable versions previously reported;
+│  ├─ opencv [3.4.7|3.4.8|...|4.2.0] would require
+│  │  └─ libopencv [==3.4.7 h32d60f7_6|==3.4.7 py27_7|...|==4.2.0 py38_4], which requires
+│  │     └─ ffmpeg >=4.1.3,<4.2.0a0 *, which conflicts with any installable versions previously reported;
+│  ├─ opencv 4.2.0 would require
+│  │  └─ libopencv ==4.2.0 py36_5, which does not exist (perhaps a missing channel);
+│  ├─ opencv [4.2.0|4.3.0|4.4.0] would require
+│  │  └─ py-opencv [==4.2.0 py36h0b673f9_6|==4.3.0 py36h0b673f9_2|==4.4.0 py36h0b673f9_2], which requires
+│  │     └─ python >=3.6,<3.7.0a0 *, which can be installed;
+│  ├─ opencv [4.2.0|4.3.0] would require
+│  │  └─ libopencv [==4.2.0 py36_7|==4.2.0 py37_7|...|==4.3.0 py38_1], which requires
+│  │     └─ ffmpeg >=4.2.3,<4.3.0a0 *, which conflicts with any installable versions previously reported;
+│  ├─ opencv [4.2.0|4.3.0|4.4.0] would require
+│  │  └─ py-opencv [==4.2.0 py37h43977f1_5|==4.2.0 py37h43977f1_6|==4.3.0 py37h43977f1_2|==4.4.0 py37h43977f1_2], which requires
+│  │     └─ python >=3.7,<3.8.0a0 *, which can be installed;
+│  ├─ opencv [4.2.0|4.3.0|4.4.0] would require
+│  │  └─ py-opencv [==4.2.0 py38h23f93f0_5|==4.2.0 py38h23f93f0_6|==4.3.0 py38h23f93f0_2|==4.4.0 py38h23f93f0_2], which requires
+│  │     └─ python >=3.8,<3.9.0a0 *, which can be installed;
+│  ├─ opencv [4.4.0|4.5.0|4.5.1|4.5.2] would require
+│  │  └─ libopencv [==4.4.0 py36_3|==4.4.0 py37_3|...|==4.5.2 py39h70bf20d_1], which requires
+│  │     └─ ffmpeg >=4.3.1,<4.4.0a0 *, which conflicts with any installable versions previously reported;
+│  ├─ opencv 4.5.0 would require
+│  │  └─ libopencv ==4.5.0 py36_5, which does not exist (perhaps a missing channel);
+│  ├─ opencv 4.5.0 would require
+│  │  └─ libopencv ==4.5.0 py36_6, which does not exist (perhaps a missing channel);
+│  ├─ opencv [4.5.3|4.5.5] would require
+│  │  └─ libopencv [==4.5.3 py31hbd5a65a_6|==4.5.3 py31he7a5e20_7|...|==4.5.5 py39hfb30bf4_6], which requires
+│  │     └─ ffmpeg >=4.3.2,<4.4.0a0 *, which conflicts with any installable versions previously reported;
+│  ├─ opencv 4.5.5 would require
+│  │  └─ libopencv [==4.5.5 py310h1897127_9|==4.5.5 py310hc83fb77_10|...|==4.5.5 py39he64e9e9_10], which requires
+│  │     └─ ffmpeg >=4.4.1,<5.0a0 *, which conflicts with any installable versions previously reported;
+│  └─ opencv [3.3.1|3.4.1|...|4.6.0] conflicts with any installable versions previously reported;
+└─ pin on python 3.11.* =* * is not installable because it requires
+   └─ python =3.11 *, which conflicts with any installable versions previously reported.
+
+Pins seem to be involved in the conflict. Currently pinned specs:
+ - python=3.11
+
+
+(mouse_sim_fix) hellwich@Artemis:~/hellwich/sdk3/mouseModel/mouse_sim$ conda list --revisions
+2026-04-04 21:33:05  (rev 0)
+    +_openmp_mutex-4.5 (conda-forge/linux-64)
+    +bzip2-1.0.8 (conda-forge/linux-64)
+    +ca-certificates-2026.2.25 (conda-forge/noarch)
+    +icu-78.3 (conda-forge/linux-64)
+    +ld_impl_linux-64-2.45.1 (conda-forge/linux-64)
+    +libexpat-2.7.5 (conda-forge/linux-64)
+    +libffi-3.5.2 (conda-forge/linux-64)
+    +libgcc-15.2.0 (conda-forge/linux-64)
+    +libgcc-ng-15.2.0 (conda-forge/linux-64)
+    +libgomp-15.2.0 (conda-forge/linux-64)
+    +liblzma-5.8.2 (conda-forge/linux-64)
+    +libnsl-2.0.1 (conda-forge/linux-64)
+    +libsqlite-3.52.0 (conda-forge/linux-64)
+    +libstdcxx-15.2.0 (conda-forge/linux-64)
+    +libuuid-2.42 (conda-forge/linux-64)
+    +libxcrypt-4.4.36 (conda-forge/linux-64)
+    +libzlib-1.3.2 (conda-forge/linux-64)
+    +ncurses-6.5 (conda-forge/linux-64)
+    +openssl-3.6.1 (conda-forge/linux-64)
+    +packaging-26.0 (conda-forge/noarch)
+    +pip-26.0.1 (conda-forge/noarch)
+    +python-3.11.15 (conda-forge/linux-64)
+    +readline-8.3 (conda-forge/linux-64)
+    +setuptools-82.0.1 (conda-forge/noarch)
+    +tk-8.6.13 (conda-forge/linux-64)
+    +tzdata-2025c (conda-forge/noarch)
+    +wheel-0.46.3 (conda-forge/noarch)
+    +zstd-1.5.7 (conda-forge/linux-64)
+
+(mouse_sim_fix) hellwich@Artemis:~/hellwich/sdk3/mouseModel/mouse_sim$ python -c "import torch; print(torch.__version__); print(torch.version.cuda); print(torch.cuda.is_available())"
+Traceback (most recent call last):
+  File "<string>", line 1, in <module>
+ModuleNotFoundError: No module named 'torch'
+(mouse_sim_fix) hellwich@Artemis:~/hellwich/sdk3/mouseModel/mouse_sim$
+
+Assistant: The new environment itself is fine; it simply never got PyTorch because the install step failed. The useful part of this result is the solver error: the blocker is now `opencv`/`ffmpeg`, not `torch` itself.
+
+Assistant: This is no longer the original failure. The new environment is not broken; it is just incomplete. `mouse_sim_fix` contains only Python and pip, because the big `conda install ...` step failed, so `ModuleNotFoundError: No module named 'torch'` is exactly what one should expect there.
+
+The real blocker is the `opencv` solve, and the reason is visible in your command structure. With **strict channel priority**, Conda ignores lower-priority channels for a package name if that package also exists in a higher-priority channel. Since you asked for `opencv` in the same transaction as `-c pytorch -c nvidia -c conda-forge --strict-channel-priority`, Conda is allowed to prefer an `opencv` from the `pytorch` channel instead of `conda-forge`, and your solver output shows it chasing an ancient `opencv-4.2.0-py36_5` / `libopencv` combination. That is a channel-mixing artifact, not a sign that PyTorch 2.2.2 itself is unavailable. citeturn0search1turn0search7turn0search13
+
+Also, your chosen PyTorch stack is valid on paper. PyTorch’s official previous-versions page lists exactly this Conda combination for Linux/Windows: `pytorch==2.2.2 torchvision==0.17.2 torchaudio==2.2.2 pytorch-cuda=12.1 -c pytorch -c nvidia`. citeturn3view1
+
+So the fix is: **do not install `opencv` in the same strict-priority solve as PyTorch**.
+
+Use this sequence.
+
+```bash
+conda remove -n mouse_sim_fix --all -y
+
+conda create -n mouse_sim_fix python=3.11 pip -y
+conda activate mouse_sim_fix
+
+# 1) Install only the PyTorch stack first
+conda install -y \
+  pytorch==2.2.2 torchvision==0.17.2 torchaudio==2.2.2 pytorch-cuda=12.1 \
+  -c pytorch -c nvidia --strict-channel-priority
+
+python -c "import torch; print(torch.__version__); print(torch.version.cuda); print(torch.cuda.is_available())"
+```
+
+If that succeeds, then add only the packages your prediction path plausibly needs:
+
+```bash
+conda install -y \
+  numpy scipy pillow tqdm scikit-learn imageio imageio-ffmpeg \
+  -c conda-forge --override-channels
+
+pip install xlstm
+```
+
+For `predict_behavior_pair_xlstm.py` itself, that is the sensible place to start, because the script imports `numpy` and `torch` directly and does not import `cv2`, `pyrender`, or `pyglet`. fileciteturn0file1
+
+Then, only if you later need the rendering/video side of the project, add those separately:
+
+```bash
+conda install -y trimesh pyrender pyglet pyopengl -c conda-forge --override-channels
+pip install opencv-python
+```
+
+That last choice is deliberate: the `opencv-python` package on PyPI is distributed as pre-built OpenCV wheels, which sidesteps the Conda `libopencv`/`ffmpeg` tangle you just hit. citeturn1search0turn1search1
+
+Your `environment.yml` is broader than what prediction alone needs, because it includes video/rendering packages such as `opencv`, `pyrender`, `pyglet`, and `pyopengl` for other parts of the project. fileciteturn0file0 That is fine, but it means a one-shot install is more fragile than a staged install.
+
+If even the first PyTorch-only install fails, use the official pip fallback for the same CUDA line:
+
+```bash
+conda remove -n mouse_sim_fix --all -y
+conda create -n mouse_sim_fix python=3.11 pip -y
+conda activate mouse_sim_fix
+
+pip install torch==2.2.2 torchvision==0.17.2 torchaudio==2.2.2 \
+  --index-url https://download.pytorch.org/whl/cu121
+
+python -c "import torch; print(torch.__version__); print(torch.version.cuda); print(torch.cuda.is_available())"
+
+pip install numpy scipy pillow tqdm scikit-learn imageio imageio-ffmpeg xlstm
+```
+
+That pip command is also listed by PyTorch for version 2.2.2 with CUDA 12.1. citeturn3view1
+
+The shortest diagnosis is: your first environment broke because of low-level binary drift; the second environment is failing for a different reason, namely **asking Conda to solve PyTorch and OpenCV together across mixed channels under strict priority**. Split the solve, and the problem should stop being opaque.
+
+User: (mouse_sim_fix) hellwich@Artemis:~/hellwich/sdk3/mouseModel/mouse_sim$ conda deactivate
+(base) hellwich@Artemis:~/hellwich/sdk3/mouseModel/mouse_sim$ conda remove -n mouse_sim_fix --all -y
+
+Remove all packages in environment /home/hellwich/anaconda3/envs/mouse_sim_fix:
+
+
+## Package Plan ##
+
+  environment location: /home/hellwich/anaconda3/envs/mouse_sim_fix
+
+
+The following packages will be REMOVED:
+
+  _openmp_mutex-4.5-20_gnu
+  bzip2-1.0.8-hda65f42_9
+  ca-certificates-2026.2.25-hbd8a1cb_0
+  icu-78.3-h33c6efd_0
+  ld_impl_linux-64-2.45.1-default_hbd61a6d_102
+  libexpat-2.7.5-hecca717_0
+  libffi-3.5.2-h3435931_0
+  libgcc-15.2.0-he0feb66_18
+  libgcc-ng-15.2.0-h69a702a_18
+  libgomp-15.2.0-he0feb66_18
+  liblzma-5.8.2-hb03c661_0
+  libnsl-2.0.1-hb9d3cd8_1
+  libsqlite-3.52.0-hf4e2dac_0
+  libstdcxx-15.2.0-h934c35e_18
+  libuuid-2.42-h5347b49_0
+  libxcrypt-4.4.36-hd590300_1
+  libzlib-1.3.2-h25fd6f3_2
+  ncurses-6.5-h2d0b736_3
+  openssl-3.6.1-h35e630c_1
+  packaging-26.0-pyhcf101f3_0
+  pip-26.0.1-pyh8b19718_0
+  python-3.11.15-hd63d673_0_cpython
+  readline-8.3-h853b02a_0
+  setuptools-82.0.1-pyh332efcf_0
+  tk-8.6.13-noxft_h366c992_103
+  tzdata-2025c-hc9c84f9_1
+  wheel-0.46.3-pyhd8ed1ab_0
+  zstd-1.5.7-hb78ec9c_6
+
+
+
+Downloading and Extracting Packages:
+
+Preparing transaction: done
+Verifying transaction: done
+Executing transaction: done
+(base) hellwich@Artemis:~/hellwich/sdk3/mouseModel/mouse_sim$ conda create -n mouse_sim_fix python=3.11 pip -y
+Channels:
+ - conda-forge
+ - defaults
+Platform: linux-64
+Collecting package metadata (repodata.json): done
+Solving environment: done
+
+
+==> WARNING: A newer version of conda exists. <==
+    current version: 25.7.0
+    latest version: 26.3.1
+
+Please update conda by running
+
+    $ conda update -n base -c defaults conda
+
+
+
+## Package Plan ##
+
+  environment location: /home/hellwich/anaconda3/envs/mouse_sim_fix
+
+  added / updated specs:
+    - pip
+    - python=3.11
+
+
+The following NEW packages will be INSTALLED:
+
+  _openmp_mutex      conda-forge/linux-64::_openmp_mutex-4.5-20_gnu 
+  bzip2              conda-forge/linux-64::bzip2-1.0.8-hda65f42_9 
+  ca-certificates    conda-forge/noarch::ca-certificates-2026.2.25-hbd8a1cb_0 
+  icu                conda-forge/linux-64::icu-78.3-h33c6efd_0 
+  ld_impl_linux-64   conda-forge/linux-64::ld_impl_linux-64-2.45.1-default_hbd61a6d_102 
+  libexpat           conda-forge/linux-64::libexpat-2.7.5-hecca717_0 
+  libffi             conda-forge/linux-64::libffi-3.5.2-h3435931_0 
+  libgcc             conda-forge/linux-64::libgcc-15.2.0-he0feb66_18 
+  libgcc-ng          conda-forge/linux-64::libgcc-ng-15.2.0-h69a702a_18 
+  libgomp            conda-forge/linux-64::libgomp-15.2.0-he0feb66_18 
+  liblzma            conda-forge/linux-64::liblzma-5.8.2-hb03c661_0 
+  libnsl             conda-forge/linux-64::libnsl-2.0.1-hb9d3cd8_1 
+  libsqlite          conda-forge/linux-64::libsqlite-3.52.0-hf4e2dac_0 
+  libstdcxx          conda-forge/linux-64::libstdcxx-15.2.0-h934c35e_18 
+  libuuid            conda-forge/linux-64::libuuid-2.42-h5347b49_0 
+  libxcrypt          conda-forge/linux-64::libxcrypt-4.4.36-hd590300_1 
+  libzlib            conda-forge/linux-64::libzlib-1.3.2-h25fd6f3_2 
+  ncurses            conda-forge/linux-64::ncurses-6.5-h2d0b736_3 
+  openssl            conda-forge/linux-64::openssl-3.6.1-h35e630c_1 
+  packaging          conda-forge/noarch::packaging-26.0-pyhcf101f3_0 
+  pip                conda-forge/noarch::pip-26.0.1-pyh8b19718_0 
+  python             conda-forge/linux-64::python-3.11.15-hd63d673_0_cpython 
+  readline           conda-forge/linux-64::readline-8.3-h853b02a_0 
+  setuptools         conda-forge/noarch::setuptools-82.0.1-pyh332efcf_0 
+  tk                 conda-forge/linux-64::tk-8.6.13-noxft_h366c992_103 
+  tzdata             conda-forge/noarch::tzdata-2025c-hc9c84f9_1 
+  wheel              conda-forge/noarch::wheel-0.46.3-pyhd8ed1ab_0 
+  zstd               conda-forge/linux-64::zstd-1.5.7-hb78ec9c_6 
+
+
+
+Downloading and Extracting Packages:
+
+Preparing transaction: done
+Verifying transaction: done
+Executing transaction: done
+#
+# To activate this environment, use
+#
+#     $ conda activate mouse_sim_fix
+#
+# To deactivate an active environment, use
+#
+#     $ conda deactivate
+
+(base) hellwich@Artemis:~/hellwich/sdk3/mouseModel/mouse_sim$ conda activate mouse_sim_fix
+(mouse_sim_fix) hellwich@Artemis:~/hellwich/sdk3/mouseModel/mouse_sim$ conda install -y \
+  pytorch==2.2.2 torchvision==0.17.2 torchaudio==2.2.2 pytorch-cuda=12.1 \
+  -c pytorch -c nvidia --strict-channel-priority
+Channels:
+ - pytorch
+ - nvidia
+ - conda-forge
+ - defaults
+Platform: linux-64
+Collecting package metadata (repodata.json): done
+Solving environment: done
+
+
+==> WARNING: A newer version of conda exists. <==
+    current version: 25.7.0
+    latest version: 26.3.1
+
+Please update conda by running
+
+    $ conda update -n base -c defaults conda
+
+
+
+## Package Plan ##
+
+  environment location: /home/hellwich/anaconda3/envs/mouse_sim_fix
+
+  added / updated specs:
+    - pytorch-cuda=12.1
+    - pytorch==2.2.2
+    - torchaudio==2.2.2
+    - torchvision==0.17.2
+
+
+The following packages will be downloaded:
+
+    package                    |            build
+    ---------------------------|-----------------
+    blas-2.116                 |              mkl          13 KB  conda-forge
+    blas-devel-3.9.0           |   16_linux64_mkl          12 KB  conda-forge
+    cffi-2.0.0                 |  py311h03d9500_1         296 KB  conda-forge
+    charset-normalizer-3.4.7   |     pyhd8ed1ab_0          57 KB  conda-forge
+    lcms2-2.15                 |       hfd0df8a_0         235 KB  conda-forge
+    ld_impl_linux-64-2.45.1    |bootstrap_ha15bf96_2         714 KB  conda-forge
+    lerc-4.1.0                 |       hdb68285_0         255 KB  conda-forge
+    libcblas-3.9.0             |   16_linux64_mkl          12 KB  conda-forge
+    libdeflate-1.17            |       h0b41bf4_0          63 KB  conda-forge
+    libgfortran-ng-15.2.0      |      h69a702a_18          27 KB  conda-forge
+    liblapack-3.9.0            |   16_linux64_mkl          12 KB  conda-forge
+    liblapacke-3.9.0           |   16_linux64_mkl          12 KB  conda-forge
+    liblzma-devel-5.8.2        |       hb03c661_0         454 KB  conda-forge
+    libtiff-4.5.0              |       h6adf6a1_2         397 KB  conda-forge
+    mkl-2022.1.0               |     h84fe81f_915       199.6 MB  conda-forge
+    mkl-devel-2022.1.0         |     ha770c72_916          25 KB  conda-forge
+    mkl-include-2022.1.0       |     h84fe81f_915         745 KB  conda-forge
+    mpc-1.4.0                  |       he0a73b1_0          98 KB  conda-forge
+    numpy-2.4.3                |  py311h2e04523_0         8.9 MB  conda-forge
+    openjpeg-2.5.0             |       hfec8fc6_2         344 KB  conda-forge
+    pillow-9.4.0               |  py311h50def17_1        44.6 MB  conda-forge
+    python-3.11.9              |hb806964_0_cpython        29.5 MB  conda-forge
+    pytorch-2.2.2              |py3.11_cuda12.1_cudnn8.9.2_0        1.35 GB  pytorch
+    requests-2.33.1            |     pyhcf101f3_0          62 KB  conda-forge
+    tbb-2021.7.0               |       h924138e_0         2.0 MB  conda-forge
+    torchaudio-2.2.2           |      py311_cu121         6.4 MB  pytorch
+    torchtriton-2.2.0          |            py311       177.3 MB  pytorch
+    torchvision-0.17.2         |      py311_cu121         8.4 MB  pytorch
+    xz-5.8.2                   |       ha02ee65_0          24 KB  conda-forge
+    xz-gpl-tools-5.8.2         |       ha02ee65_0          33 KB  conda-forge
+    xz-tools-5.8.2             |       hb03c661_0          94 KB  conda-forge
+    zstandard-0.23.0           |  py311h49ec1c0_3         476 KB  conda-forge
+    ------------------------------------------------------------
+                                           Total:        1.82 GB
+
+The following NEW packages will be INSTALLED:
+
+  blas               conda-forge/linux-64::blas-2.116-mkl 
+  blas-devel         conda-forge/linux-64::blas-devel-3.9.0-16_linux64_mkl 
+  brotli-python      conda-forge/linux-64::brotli-python-1.2.0-py311h66f275b_1 
+  certifi            conda-forge/noarch::certifi-2026.2.25-pyhd8ed1ab_0 
+  cffi               conda-forge/linux-64::cffi-2.0.0-py311h03d9500_1 
+  charset-normalizer conda-forge/noarch::charset-normalizer-3.4.7-pyhd8ed1ab_0 
+  cpython            conda-forge/noarch::cpython-3.11.15-py311hd8ed1ab_0 
+  cuda-cudart        nvidia/linux-64::cuda-cudart-12.1.105-0 
+  cuda-cupti         nvidia/linux-64::cuda-cupti-12.1.105-0 
+  cuda-libraries     nvidia/linux-64::cuda-libraries-12.1.0-0 
+  cuda-nvrtc         nvidia/linux-64::cuda-nvrtc-12.1.105-0 
+  cuda-nvtx          nvidia/linux-64::cuda-nvtx-12.1.105-0 
+  cuda-opencl        nvidia/linux-64::cuda-opencl-12.9.19-0 
+  cuda-runtime       nvidia/linux-64::cuda-runtime-12.1.0-0 
+  cuda-version       nvidia/noarch::cuda-version-12.9-3 
+  ffmpeg             pytorch/linux-64::ffmpeg-4.3-hf484d3e_0 
+  filelock           conda-forge/noarch::filelock-3.25.2-pyhd8ed1ab_0 
+  freetype           conda-forge/linux-64::freetype-2.12.1-h267a509_2 
+  gmp                conda-forge/linux-64::gmp-6.3.0-hac33072_2 
+  gmpy2              conda-forge/linux-64::gmpy2-2.3.0-py311h92a432a_1 
+  gnutls             conda-forge/linux-64::gnutls-3.6.13-h85f3911_1 
+  h2                 conda-forge/noarch::h2-4.3.0-pyhcf101f3_0 
+  hpack              conda-forge/noarch::hpack-4.1.0-pyhd8ed1ab_0 
+  hyperframe         conda-forge/noarch::hyperframe-6.1.0-pyhd8ed1ab_0 
+  idna               conda-forge/noarch::idna-3.11-pyhd8ed1ab_0 
+  jinja2             conda-forge/noarch::jinja2-3.1.6-pyhcf101f3_1 
+  jpeg               conda-forge/linux-64::jpeg-9e-h166bdaf_2 
+  lame               conda-forge/linux-64::lame-3.100-h166bdaf_1003 
+  lcms2              conda-forge/linux-64::lcms2-2.15-hfd0df8a_0 
+  lerc               conda-forge/linux-64::lerc-4.1.0-hdb68285_0 
+  libblas            conda-forge/linux-64::libblas-3.9.0-16_linux64_mkl 
+  libcblas           conda-forge/linux-64::libcblas-3.9.0-16_linux64_mkl 
+  libcublas          nvidia/linux-64::libcublas-12.1.0.26-0 
+  libcufft           nvidia/linux-64::libcufft-11.0.2.4-0 
+  libcufile          nvidia/linux-64::libcufile-1.14.1.1-4 
+  libcurand          nvidia/linux-64::libcurand-10.3.10.19-0 
+  libcusolver        nvidia/linux-64::libcusolver-11.4.4.55-0 
+  libcusparse        nvidia/linux-64::libcusparse-12.0.2.55-0 
+  libdeflate         conda-forge/linux-64::libdeflate-1.17-h0b41bf4_0 
+  libgfortran        conda-forge/linux-64::libgfortran-15.2.0-h69a702a_18 
+  libgfortran-ng     conda-forge/linux-64::libgfortran-ng-15.2.0-h69a702a_18 
+  libgfortran5       conda-forge/linux-64::libgfortran5-15.2.0-h68bc16d_18 
+  libiconv           conda-forge/linux-64::libiconv-1.18-h3b78370_2 
+  libjpeg-turbo      pytorch/linux-64::libjpeg-turbo-2.0.0-h9bf148f_0 
+  liblapack          conda-forge/linux-64::liblapack-3.9.0-16_linux64_mkl 
+  liblapacke         conda-forge/linux-64::liblapacke-3.9.0-16_linux64_mkl 
+  liblzma-devel      conda-forge/linux-64::liblzma-devel-5.8.2-hb03c661_0 
+  libnpp             nvidia/linux-64::libnpp-12.0.2.50-0 
+  libnvjitlink       nvidia/linux-64::libnvjitlink-12.1.105-0 
+  libnvjpeg          nvidia/linux-64::libnvjpeg-12.1.1.14-0 
+  libpng             conda-forge/linux-64::libpng-1.6.43-h2797004_0 
+  libstdcxx-ng       conda-forge/linux-64::libstdcxx-ng-15.2.0-hdf11a46_18 
+  libtiff            conda-forge/linux-64::libtiff-4.5.0-h6adf6a1_2 
+  libwebp-base       conda-forge/linux-64::libwebp-base-1.6.0-hd42ef1d_0 
+  libxcb             conda-forge/linux-64::libxcb-1.13-h7f98852_1004 
+  llvm-openmp        conda-forge/linux-64::llvm-openmp-15.0.7-h0cdce71_0 
+  markupsafe         conda-forge/linux-64::markupsafe-3.0.3-py311h3778330_1 
+  mkl                conda-forge/linux-64::mkl-2022.1.0-h84fe81f_915 
+  mkl-devel          conda-forge/linux-64::mkl-devel-2022.1.0-ha770c72_916 
+  mkl-include        conda-forge/linux-64::mkl-include-2022.1.0-h84fe81f_915 
+  mpc                conda-forge/linux-64::mpc-1.4.0-he0a73b1_0 
+  mpfr               conda-forge/linux-64::mpfr-4.2.2-he0a73b1_0 
+  mpmath             conda-forge/noarch::mpmath-1.4.1-pyhd8ed1ab_0 
+  nettle             conda-forge/linux-64::nettle-3.6-he412f7d_0 
+  networkx           conda-forge/noarch::networkx-3.6.1-pyhcf101f3_0 
+  numpy              conda-forge/linux-64::numpy-2.4.3-py311h2e04523_0 
+  ocl-icd            conda-forge/linux-64::ocl-icd-2.3.3-hb9d3cd8_0 
+  opencl-headers     conda-forge/linux-64::opencl-headers-2025.06.13-hecca717_0 
+  openh264           conda-forge/linux-64::openh264-2.1.1-h780b84a_0 
+  openjpeg           conda-forge/linux-64::openjpeg-2.5.0-hfec8fc6_2 
+  pillow             conda-forge/linux-64::pillow-9.4.0-py311h50def17_1 
+  pthread-stubs      conda-forge/linux-64::pthread-stubs-0.4-hb9d3cd8_1002 
+  pycparser          conda-forge/noarch::pycparser-2.22-pyh29332c3_1 
+  pysocks            conda-forge/noarch::pysocks-1.7.1-pyha55dd90_7 
+  python_abi         conda-forge/noarch::python_abi-3.11-8_cp311 
+  pytorch            pytorch/linux-64::pytorch-2.2.2-py3.11_cuda12.1_cudnn8.9.2_0 
+  pytorch-cuda       pytorch/linux-64::pytorch-cuda-12.1-ha16c6d3_6 
+  pytorch-mutex      pytorch/noarch::pytorch-mutex-1.0-cuda 
+  pyyaml             conda-forge/linux-64::pyyaml-6.0.3-py311h3778330_1 
+  requests           conda-forge/noarch::requests-2.33.1-pyhcf101f3_0 
+  sympy              conda-forge/noarch::sympy-1.14.0-pyh2585a3b_106 
+  tbb                conda-forge/linux-64::tbb-2021.7.0-h924138e_0 
+  torchaudio         pytorch/linux-64::torchaudio-2.2.2-py311_cu121 
+  torchtriton        pytorch/linux-64::torchtriton-2.2.0-py311 
+  torchvision        pytorch/linux-64::torchvision-0.17.2-py311_cu121 
+  typing_extensions  conda-forge/noarch::typing_extensions-4.15.0-pyhcf101f3_0 
+  urllib3            conda-forge/noarch::urllib3-2.5.0-pyhd8ed1ab_0 
+  xorg-libxau        conda-forge/linux-64::xorg-libxau-1.0.12-hb03c661_1 
+  xorg-libxdmcp      conda-forge/linux-64::xorg-libxdmcp-1.1.5-hb03c661_1 
+  xz                 conda-forge/linux-64::xz-5.8.2-ha02ee65_0 
+  xz-gpl-tools       conda-forge/linux-64::xz-gpl-tools-5.8.2-ha02ee65_0 
+  xz-tools           conda-forge/linux-64::xz-tools-5.8.2-hb03c661_0 
+  yaml               conda-forge/linux-64::yaml-0.2.5-h280c20c_3 
+  zlib               conda-forge/linux-64::zlib-1.2.13-h4ab18f5_6 
+  zstandard          conda-forge/linux-64::zstandard-0.23.0-py311h49ec1c0_3 
+
+The following packages will be DOWNGRADED:
+
+  libsqlite                               3.52.0-hf4e2dac_0 --> 3.46.0-hde9e2c9_0 
+  libzlib                                  1.3.2-h25fd6f3_2 --> 1.2.13-h4ab18f5_6 
+  python                         3.11.15-hd63d673_0_cpython --> 3.11.9-hb806964_0_cpython 
+  zstd                                     1.5.7-hb78ec9c_6 --> 1.5.6-ha6fb4c9_0 
+
+The following packages will be REVISED:
+
+  _openmp_mutex                                  4.5-20_gnu --> 4.5-7_kmp_llvm 
+  ld_impl_linux-64              2.45.1-default_hbd61a6d_102 --> 2.45.1-bootstrap_ha15bf96_2 
+  tk                              8.6.13-noxft_h366c992_103 --> 8.6.13-noxft_h4845f30_101 
+
+
+
+Downloading and Extracting Packages:
+                                                                                                                                                            
+Preparing transaction: done                                                                                                                                 
+Verifying transaction: done                                                                                                                                 
+Executing transaction: done                                                                                                                                 
+(mouse_sim_fix) hellwich@Artemis:~/hellwich/sdk3/mouseModel/mouse_sim$ python -c "import torch; print(torch.__version__); print(torch.version.cuda); print(torch.cuda.is_available())"
+                                                                                                                                                            
+A module that was compiled using NumPy 1.x cannot be run in                                                                                                 
+NumPy 2.4.3 as it may crash. To support both 1.x and 2.x                                                                                                    
+versions of NumPy, modules must be compiled with NumPy 2.0.                                                                                                 
+Some module may need to rebuild instead e.g. with 'pybind11>=2.12'.                                                                                         
+                                                                                                                                                            
+If you are a user of the module, the easiest solution will be to                                                                                            
+downgrade to 'numpy<2' or try to upgrade the affected module.                                                                                               
+We expect that some modules will need time to support NumPy 2.                                                                                              
+                                                                                                                                                            
+Traceback (most recent call last):  File "<string>", line 1, in <module>                                                                                    
+  File "/home/hellwich/anaconda3/envs/mouse_sim_fix/lib/python3.11/site-packages/torch/__init__.py", line 1477, in <module>                                 
+    from .functional import *  # noqa: F403                                                                                                                 
+  File "/home/hellwich/anaconda3/envs/mouse_sim_fix/lib/python3.11/site-packages/torch/functional.py", line 9, in <module>                                  
+    import torch.nn.functional as F                                                                                                                         
+  File "/home/hellwich/anaconda3/envs/mouse_sim_fix/lib/python3.11/site-packages/torch/nn/__init__.py", line 1, in <module>                                 
+    from .modules import *  # noqa: F403                                                                                                                    
+  File "/home/hellwich/anaconda3/envs/mouse_sim_fix/lib/python3.11/site-packages/torch/nn/modules/__init__.py", line 35, in <module>                        
+    from .transformer import TransformerEncoder, TransformerDecoder, \                                                                                      
+  File "/home/hellwich/anaconda3/envs/mouse_sim_fix/lib/python3.11/site-packages/torch/nn/modules/transformer.py", line 20, in <module>                     
+    device: torch.device = torch.device(torch._C._get_default_device()),  # torch.device('cpu'),                                                            
+/home/hellwich/anaconda3/envs/mouse_sim_fix/lib/python3.11/site-packages/torch/nn/modules/transformer.py:20: UserWarning: Failed to initialize NumPy: _ARRAY_API not found (Triggered internally at /opt/conda/conda-bld/pytorch_1711403378171/work/torch/csrc/utils/tensor_numpy.cpp:84.)                              
+  device: torch.device = torch.device(torch._C._get_default_device()),  # torch.device('cpu'),                                                              
+2.2.2                                                                                                                                                       
+12.1                                                                                                                                                        
+True
+(mouse_sim_fix) hellwich@Artemis:~/hellwich/sdk3/mouseModel/mouse_sim$
+
+Assistant: You’ve cleared the original blocker: PyTorch now imports, sees CUDA 12.1, and reports `torch.cuda.is_available() == True`. The new issue is narrower: this environment pulled in NumPy 2.4.3, and PyTorch 2.2.2 is warning that it was compiled against the NumPy 1.x ABI.
+
+Assistant: Good. You have passed the hard part.
+
+What your last output means is:
+
+- the **original `iJIT_NotifyEvent` failure is gone**
+- PyTorch now **imports successfully**
+- it sees **CUDA 12.1**
+- `torch.cuda.is_available()` is **True**
+
+So the broken low-level torch/MKL state in the old environment has been replaced successfully.
+
+The new problem is different and much smaller: this fresh environment pulled in **NumPy 2.4.3**, while this PyTorch build was compiled against the **NumPy 1.x ABI**. NumPy’s 2.0 migration notes explicitly say NumPy 2.0 breaks binary compatibility for packages using NumPy’s C API, and PyTorch’s own issue tracker shows the same `_ARRAY_API not found` / “compiled using NumPy 1.x” warning pattern with NumPy 2.x. citeturn1view0turn1view3
+
+So the next step is simply to downgrade NumPy to `<2`.
+
+Run this in `mouse_sim_fix`:
+
+```bash
+conda activate mouse_sim_fix
+conda install -y "numpy<2" -c conda-forge --override-channels
+```
+
+I would expect that to give you something like NumPy 1.26.x, which is the safe target here.
+
+Then verify:
+
+```bash
+python -c "import numpy, torch; print('numpy', numpy.__version__); print('torch', torch.__version__); print('cuda', torch.version.cuda); print('gpu', torch.cuda.is_available())"
+```
+
+After that, install only the packages needed for prediction first, not the full graphics stack all at once:
+
+```bash
+conda install -y scipy pillow tqdm scikit-learn imageio imageio-ffmpeg -c conda-forge --override-channels
+pip install xlstm
+```
+
+That staging is sensible because your prediction script directly imports `numpy` and `torch`, and your project environment file leaves many broader packages unpinned, including rendering/video packages that were what triggered solver trouble earlier. fileciteturn0file1turn0file0
+
+Then test the script again:
+
+```bash
+python predict_behavior_pair_xlstm.py \
+  --ckpt out_pair_train2/behavior_pair_lstm.pt \
+  --coords-3d out_pair/coords_3d.csv \
+  --out-dir out_pair_pred2 \
+  --no-labels
+```
+
+One more important point: the install command you used for PyTorch 2.2.2 + CUDA 12.1 is in fact an officially published PyTorch combination, so the torch side is now on a supported track. citeturn2view1
+
+So the diagnosis now is:
+
+- **old env:** broken torch runtime stack
+- **new env:** torch is fine, but **NumPy is too new**
+
+If you want to make this stick, change your `environment.yml` so `numpy` is pinned to `<2` for this project until all packages you rely on are confirmed NumPy-2-ready. fileciteturn0file0turn1view0
+
+Paste the output of the `import numpy, torch` verification command after the downgrade, and I’ll tell you whether you can run prediction immediately or whether one more dependency is still missing.
+
+User: (mouse_sim_fix) hellwich@Artemis:~/hellwich/sdk3/mouseModel/mouse_sim$ python predict_behavior_pair_xlstm.py   --ckpt out_pair_train2/behavior_pair_lstm.pt   --coords-3d out_pair/coords_3d.csv   --out-dir out_pair_pred2   --report
+device: cuda
+gpu: NVIDIA GeForce RTX 4090 Laptop GPU
+wrote: out_pair_pred2/ethogram_pred_out_pair.csv
+
+== out_pair ==
+Interaction f1: 0.9815
+              precision    recall  f1-score   support
+
+           0     0.9813    0.9342    0.9572      1855
+           1     0.9712    0.9920    0.9815      4145
+
+    accuracy                         0.9742      6000
+   macro avg     0.9762    0.9631    0.9693      6000
+weighted avg     0.9743    0.9742    0.9740      6000
+
+Rear0 f1 (non-interaction): 0.9613
+              precision    recall  f1-score   support
+
+           0     0.9960    1.0000    0.9980      1761
+           1     1.0000    0.9255    0.9613        94
+
+    accuracy                         0.9962      1855
+   macro avg     0.9980    0.9628    0.9797      1855
+weighted avg     0.9962    0.9962    0.9962      1855
+
+Rear1 f1 (non-interaction): 0.9311
+              precision    recall  f1-score   support
+
+           0     0.9941    0.9935    0.9938      1703
+           1     0.9281    0.9342    0.9311       152
+
+    accuracy                         0.9887      1855
+   macro avg     0.9611    0.9639    0.9625      1855
+weighted avg     0.9887    0.9887    0.9887      1855
+
+Ethograms written to: out_pair_pred2
+
+Now it works. FRom the command line it is not obvious where the ground truth labels come from . So why is the program able to give precision recall and f1 from?
+
+Assistant: I’m checking the script’s exact control flow for where it decides labels are present and how it derives the metrics, so I can answer from the code rather than by guesswork.
+
+Assistant: Yes. The ground truth is coming from `out_pair/coords_3d.csv` itself.
+
+The script does this:
+
+- it checks whether the input CSV has a column named `"behavior"` via `_csv_has_column(p, "behavior")`
+- it sets `has_behavior = (not args.no_labels) and _csv_has_column(...)`
+- if `has_behavior` is true, it loads the CSV with `require_behavior=True`
+- later, if you passed `--report` and `has_behavior` is true, it computes
+  `y_int, y0, y1, mask = tbp.derive_multitask_labels(run_raw.beh)`
+  and compares those labels against the predictions with `classification_report` and `f1_score` fileciteturn4file0
+
+So the labels are **not** coming from the checkpoint. They are coming from the `behavior` field inside the loaded run data, which in turn comes from the input CSV.
+
+That is why your earlier command with `--no-labels` suppressed metrics, while the new one with `--report` produced them. In your protocol, the earlier prediction command explicitly used `--no-labels`; your current successful command did not. fileciteturn3file5
+
+So the practical answer is:
+
+- `out_pair/coords_3d.csv` apparently contains a `behavior` column
+- because you did **not** pass `--no-labels`, the script treated that CSV as labeled data
+- `run_raw.beh` became the source of the ground-truth labels
+- `tbp.derive_multitask_labels(...)` converted those raw behavior annotations into the three evaluation targets: interaction, rear0, rear1 fileciteturn4file0
+
+That also explains why the help text says:
+
+- `--report`: “If labels exist, print classification reports”
+- `--no-labels`: “Treat input as unlabeled (behavior column may be absent); metrics won't be computed.” fileciteturn4file0
+
+So the non-obvious part is simply that your “coordinates” CSV is not purely geometric; it also seems to embed behavior annotations.
+
+A quick way to verify from the shell is:
+
+```bash
+head -n 1 out_pair/coords_3d.csv
+```
+
+If you see `behavior` in the header, that is the source of the ground truth.
+
+User: (mouse_sim_fix) hellwich@Artemis:~/hellwich/sdk3/mouseModel/mouse_sim$ head -n 1 out_pair/coords_3d.csv
+frame,time,mouse_id,behavior,node,x,y,z
+
+Assistant: I’m pulling the exact lines from the script that gate reporting and read the `behavior` column, so I can tie your header output directly to the code path.
+
+Assistant: Exactly. That header confirms it: `out_pair/coords_3d.csv` contains a `behavior` column, so the script has access to ground truth labels.
+
+The relevant code path is:
+
+- `has_behavior = (not args.no_labels) and _csv_has_column(p, "behavior")`
+- then `load_coords_3d_csv_pair(..., require_behavior=has_behavior)`
+- and, if `--report` was given and `has_behavior` is true, it computes the targets from `run_raw.beh` via `tbp.derive_multitask_labels(run_raw.beh)` and feeds those into `classification_report` / `f1_score`. fileciteturn5file3
+
+So your successful run behaved as follows:
+
+- you did **not** pass `--no-labels`
+- `_csv_has_column(..., "behavior")` returned true
+- the loader read the behavior annotations from the CSV
+- `--report` then compared predictions against those annotations and printed precision/recall/F1. fileciteturn5file2turn5file3
+
+Your earlier protocol entry used `--no-labels` for prediction on the same `out_pair/coords_3d.csv`, which would have suppressed that evaluation path even if the column existed. fileciteturn5file6
+
+So the answer to “where do the labels come from?” is simply: from the same CSV file as the coordinates. In this dataset, `coords_3d.csv` is not just geometry; it also carries behavior annotations. The script then derives the three reported tasks from that raw `behavior` signal: interaction, rear0, and rear1. fileciteturn5file3
+
+If you want to see how those raw `behavior` values are mapped into the three targets, the next file to inspect is `train_behavior_pair.py` or `train_behavior_pair_xlstm.py`, specifically the implementation of `derive_multitask_labels`.
+
+User: But I hope that the presence of ground truth labels in the input data does not influence the predictions. :)
+
+Assistant: Yes — in this script, the labels do **not** influence the predictions.
+
+The relevant order is:
+
+1. the CSV is loaded  
+2. `run = tbp.preprocess_run(...)` is built  
+3. predictions are computed by  
+   `p_int, p0, p1 = tbp.predict_probs_per_run(model, run, ...)`
+4. only **after that**, if `--report` and labels are available, the script derives ground truth with  
+   `tbp.derive_multitask_labels(run_raw.beh)`  
+   and computes F1 / precision / recall. fileciteturn0file1
+
+So within `predict_behavior_pair_xlstm.py`, the `behavior` column is used for **evaluation**, not for changing the model’s outputs. The same applies to `export_ethogram_ground_truth(...)`: that writes reference labels, it does not feed them into inference. fileciteturn0file1
+
+The only caveat is this: I have not seen the source of `tbp.load_coords_3d_csv_pair`, `tbp.preprocess_run`, or `tbp.predict_probs_per_run`, so I cannot prove from code inspection that those helper functions never touch `behavior`. But from the structure here, they are clearly intended to use `behavior` only for reporting, and anything else would be a design bug.
+
+A very clean empirical check is this:
+
+```bash
+python predict_behavior_pair_xlstm.py \
+  --ckpt out_pair_train2/behavior_pair_lstm.pt \
+  --coords-3d out_pair/coords_3d.csv \
+  --out-dir out_pair_pred_with_report \
+  --report
+
+python predict_behavior_pair_xlstm.py \
+  --ckpt out_pair_train2/behavior_pair_lstm.pt \
+  --coords-3d out_pair/coords_3d.csv \
+  --out-dir out_pair_pred_no_labels \
+  --no-labels
+```
+
+Then compare the two prediction CSVs. If they are identical, that demonstrates the labels are not affecting inference. Given this script, that is what I would expect.
+
+User: All seems fine so far:
+
+(mouse_sim_fix) hellwich@Artemis:~/hellwich/sdk3/mouseModel/mouse_sim$ python predict_behavior_pair_xlstm.py \
+  --ckpt out_pair_train2/behavior_pair_lstm.pt \
+  --coords-3d out_pair/coords_3d.csv \
+  --out-dir out_pair_pred_with_report \
+  --report
+
+python predict_behavior_pair_xlstm.py \
+  --ckpt out_pair_train2/behavior_pair_lstm.pt \
+  --coords-3d out_pair/coords_3d.csv \
+  --out-dir out_pair_pred_no_labels \
+  --no-labels
+device: cuda
+gpu: NVIDIA GeForce RTX 4090 Laptop GPU
+wrote: out_pair_pred_with_report/ethogram_pred_out_pair.csv
+
+== out_pair ==
+Interaction f1: 0.9815
+              precision    recall  f1-score   support
+
+           0     0.9813    0.9342    0.9572      1855
+           1     0.9712    0.9920    0.9815      4145
+
+    accuracy                         0.9742      6000
+   macro avg     0.9762    0.9631    0.9693      6000
+weighted avg     0.9743    0.9742    0.9740      6000
+
+Rear0 f1 (non-interaction): 0.9613
+              precision    recall  f1-score   support
+
+           0     0.9960    1.0000    0.9980      1761
+           1     1.0000    0.9255    0.9613        94
+
+    accuracy                         0.9962      1855
+   macro avg     0.9980    0.9628    0.9797      1855
+weighted avg     0.9962    0.9962    0.9962      1855
+
+Rear1 f1 (non-interaction): 0.9311
+              precision    recall  f1-score   support
+
+           0     0.9941    0.9935    0.9938      1703
+           1     0.9281    0.9342    0.9311       152
+
+    accuracy                         0.9887      1855
+   macro avg     0.9611    0.9639    0.9625      1855
+weighted avg     0.9887    0.9887    0.9887      1855
+
+Ethograms written to: out_pair_pred_with_report
+device: cuda
+gpu: NVIDIA GeForce RTX 4090 Laptop GPU
+wrote: out_pair_pred_no_labels/ethogram_pred_out_pair.csv
+Ethograms written to: out_pair_pred_no_labels
+(mouse_sim_fix) hellwich@Artemis:~/hellwich/sdk3/mouseModel/mouse_sim$ diff out_pair_pred_no_labels/ethogram_pred_out_pair.csv out_pair_pred_with_report/ethogram_
+ethogram_gt_out_pair.csv    ethogram_pred_out_pair.csv  
+(mouse_sim_fix) hellwich@Artemis:~/hellwich/sdk3/mouseModel/mouse_sim$ diff out_pair_pred_no_labels/ethogram_pred_out_pair.csv out_pair_pred_with_report/ethogram_pred_out_pair.csv
+
+Assistant: Yes. That is the expected outcome.
+
+`diff` produced no output, which means the two prediction files are identical byte-for-byte. So in this run, the presence of the `behavior` column and the use of `--report` did not alter the predictions.
+
+The only difference between the two runs is that the `--report` run also computed metrics and, because labels were available, wrote an additional ground-truth ethogram file. That matches the script structure: prediction is performed first, and reporting/export of ground truth happens afterward. fileciteturn0file1
+
+So your empirical test supports the intended interpretation:
+
+- `behavior` in the input CSV is used for evaluation/reporting
+- it is not being used to steer inference
+- the prediction output is unchanged whether labels are considered or ignored
+
+The tab-completion line also hints at this: in `out_pair_pred_with_report/` there are two files, `ethogram_gt_out_pair.csv` and `ethogram_pred_out_pair.csv`, whereas in the no-labels case only the prediction file is relevant. That is consistent with the code path for labeled vs. unlabeled input. fileciteturn0file1
+
+At this point, the behavior of the script looks internally consistent.
+
+User: Okay, so everything looks good. The disadvantage of the tried commands is that the 3D input data in coords_3D.csv is simulated 3D data of two mice (skeletons) behaving in a cage. Meanwhile I have more realistic 3D observations stemming from rendering images of meshed mice surfaces adapted to the 3D skeleton, extracting 2D body parts from these images using DeepLabCut, and ray intersections in 3D space. I want to run the prediction on that data.
+
+However, besides a necessary format conversion of the data, there is a conceptual issue I would like to discuss with you. In the uploaded predict...py prior to feeding the 3D positions to a deep net, the co-ordinates of the two mice are transformed such that they are given in a co-ordinate system allowing to analyze how mouse 1 is positioned relative to mouse 0 in order to better infer whether they interact with each other or not (i.e. to infer "interaction" behavior opposed to both mice individually being in "running" or "rearing" behavior.
+
+Please inspect the code and explain what in detail happens in this preprocessing of coordinates, e.g. whether global coordinates or relative movements in global space remain to be analyzed or whether only pose without absolute motion is used to estimate the behavior class.
+
+To my memory, mouse 0 is taken as a reference, its body part motions are transformed to its model reference coordinate system, and mouse 1 is transformed with all its motions to this coordinate system, too. If now mouse 0 is having occluded body parts, would the existing software succeed to find the position of the model reference system? Or would it be necessary to extend the existing software such that a transform from model coordinate system is estimated on the basis of the observed 3D body part coordinates. I.e. then the transformation would be estimated from a subset of all possible body parts, namely the observed/unoccluded parts only. This should not be too difficult. However, my question is whether it is already implemented, or whether the software has to be extended.
+
+Then, secondly, in the estimated 3D data it may happen that body parts are not occurring as they are occluded. So there are not all body part coordinates given - opposed to the directly simulated 3D data the deep learned model was trained on. (I am uploading the training .py program also.) Would it be possible to mask the missing body parts somehow and allow the data to be fed to the deep net as it was trained now (i.e. trained on data without missing parts)?
+
+In case masking is not possible with the current DL model, the missing parts could be equipped with coordinates by computing a transform between world/cage coordinates from matches between model body parts and unoccluded/measured world body parts and transforming the missing parts from model space to world space. That would be done for both mice.
+
+I am looking forward to your analysis. If necessary, please do not hesitate to ask for further explanations from my side.
+
+Assistant: I’m tracing the preprocessing path end-to-end: CSV loading, coordinate-frame construction, feature building, and where missing points would fail or quietly become zeros. Then I’ll separate what is already implemented from what would require an extension.
+
+Assistant: One non-obvious point from the code: the deep model is not using a per-mouse model/body frame at all. The coordinate system is rebuilt every frame from the two `tail_root` points together, and `head` is only validated, not actually used in the deep feature construction.
+
+Assistant: I inspected the code path, and your memory is close in spirit but not in the actual implementation.
+
+The current deep model does **not** use mouse 0’s own body/model coordinate system as the reference frame. Instead, for each time step it builds a **pair frame** from the two mice’s `tail_root` positions in world coordinates: the origin is the midpoint between the two tail roots, the x-axis points from mouse 0 tail root to mouse 1 tail root projected onto the xy-plane, and the z-axis is fixed to world up `(0,0,1)`. Then **all keypoints of both mice** are translated and rotated into that pair frame. This is done in `pair_frame_transform()` and `to_pair_frame()`. fileciteturn8file0
+
+So the preprocessing removes a lot of global information. Absolute cage position is removed because the origin is recentered to the midpoint each frame. Absolute heading in the cage is also removed because the pair is rotated so that the inter-tail-root direction becomes the x-axis each frame. What remains is the **relative configuration of the two mice**, including each mouse’s pose relative to the pair frame, the distance between them, and changes of that relative configuration over time. That is exactly why the representation is well suited for the interaction-vs-noninteraction decision. fileciteturn8file0
+
+The actual feature vector is built in `make_pair_features()`. It flattens all transformed coordinates for both mice, so the static position part has size `2*K*3`. If `use_vel=True`, it also appends first differences over time of those transformed coordinates, adding another `2*K*3`. Finally it adds two scalar extras: `nose_dist` and `tail_dist`, both measured in the pair frame. So with velocities enabled, the feature dimension is `12*K + 2`. fileciteturn8file0
+
+A subtle point: these “velocities” are **not global world-space velocities**. They are frame-to-frame differences **after** the pair-frame transform. So they encode motion in a moving, rotating relative coordinate system. If both mice translate together across the cage while keeping the same mutual configuration, that common global translation is largely removed. If the whole pair rotates together in the cage without changing mutual arrangement, that rotation is also largely removed. What remains is motion of body parts **relative to the pair frame**, which is exactly the motion signal the model was trained on. fileciteturn8file0
+
+Another non-obvious detail: `head` is checked for existence, but in the deep feature construction it is not actually used numerically. `make_pair_features()` uses the full flattened transformed coordinates of all nodes, plus `nose_dist` and `tail_dist`; the `head` argument is only validated. The `head` point matters in the geometric rule baseline, but not in the learned feature construction shown here. fileciteturn8file0
+
+There is also a training-time symmetry mechanism that matters conceptually. `preprocess_run()` creates `X_base` and also `X_swap`, where mouse identities are swapped, the pair frame is recomputed, and the per-mouse labels are swapped too. The training dataset then randomly uses base or swapped windows. That means the model is trained to be relatively invariant to whether a given physical mouse is indexed as 0 or 1. At inference, only `X_base` is used. fileciteturn8file1
+
+Now to the occlusion question. The current software does **not** estimate a transform from a subset of observed body parts to a model/body coordinate system. There is no rigid or similarity fit from visible points to a canonical mouse model, and no occlusion-aware frame estimation. The pair frame is computed directly and only from the two `tail_root` positions already present in `run.pos`. If `tail_root` is wrong or missing, the frame is wrong. There is a small fallback in `pair_frame_transform()` for the degenerate case where the inter-tail-root vector is nearly zero, but that is just a numerical fallback to a default axis, not an estimation from other visible parts. fileciteturn8file0
+
+That means your idea — estimating the transform from the subset of observed/unoccluded body parts and then recovering missing points from model space — is **not already implemented** in the current behavior-classification code. If you need robust handling when `tail_root` or other keypoints are occluded, the software would have to be extended upstream of `preprocess_run()`. fileciteturn8file0
+
+There is an additional important issue: the loader does **not** explicitly reject missing body-part rows inside a frame/mouse. `load_coords_3d_csv_pair()` initializes the whole `pos` array with zeros and then fills only the rows that exist in the CSV. It raises an error only if an entire frame/mouse block is missing, not if some individual nodes are absent. Therefore, if a body part is occluded and omitted from the CSV, that node’s coordinate stays at `(0,0,0)` silently. fileciteturn8file0
+
+So in practice the current software already has a kind of “implicit missing-value handling,” but it is a bad one: **missing points become zeros, not masked values**. Downstream, the deep model receives a dense fixed-length tensor with no visibility mask channel. It has no way to distinguish “true coordinate near origin after transform” from “missing point filled with zero.” This is especially dangerous for `tail_root`, because it affects the frame construction itself, and also for `nose`, because `nose_dist` is computed explicitly from the nose coordinates. fileciteturn8file0turn7file7
+
+So the answer to your second question is: with the current trained network, proper masking of missing body parts is **not supported**. The model interface is a plain dense feature tensor, and the checkpoint stores only `in_dim`, node order, scale, frame parameters, and the `use_vel` flag; there is no notion of a missingness mask in inference. fileciteturn7file7turn8file1
+
+There are three realistic ways forward.
+
+The least invasive option is **imputation before the current preprocessing**. Convert your estimated 3D data into the expected CSV schema, then for each mouse and frame estimate a rigid or similarity transform from the visible observed points to the canonical mouse model (or use temporal interpolation / last-known pose), and fill in the missing points before calling the existing predictor. This preserves the fixed input dimensionality expected by the trained model. Your idea of using matched visible body parts to recover missing ones fits this path very well.
+
+A more robust variant is to do that imputation with temporal smoothing, because framewise fitting from a sparse visible subset can be noisy. In other words: use visible points to estimate pose, propagate pose over time, and fill missing keypoints from the posed model. That is still compatible with the existing trained network because the network only sees completed coordinates afterward.
+
+The principled long-term option is to **extend the model and retrain**. You would add visibility/missingness channels per keypoint, possibly also confidence scores from DLC/triangulation, and train with synthetic point dropout so the network learns how to interpret missing observations. That would be the cleanest way to support real occlusion. But it is a different model from the one you have now.
+
+My bottom line is this:
+
+The current software uses a **pair-centered relative coordinate system**, not a mouse-0 body/model frame. It removes absolute global translation and orientation, but retains relative pose and relative motion in that pair frame. It does **not** currently estimate the frame from a subset of visible points, and it does **not** currently support explicit masking of missing keypoints. Missing keypoints are effectively zero-filled, which is unsafe for realistic occluded data. For your rendered-DLC-ray-intersection data, a preprocessing extension that reconstructs or imputes missing keypoints before prediction is the sensible route. fileciteturn8file0turn8file1turn7file7
+
+The most useful next step would be to design the conversion/imputation layer for your estimated 3D data so it outputs exactly the node set and order expected by the checkpoint.
+
+User: I am uploading the rigid mouse model graph mouse3...txt with 3D coords of the body parts, the coords_3d.csv file to inform about the input data (format) to the prediction...py that does not have missing points, and the 3D estimations in ...triangulated3d.csv formatted differently compared to coords_3d.csv but allowing the find measurements equivalent to it for observed points and allowing to discover when a point is missing (i.e. not in ...triangulated3d (or being obviously invalid in it?)
+
+After the estimation of missing points based on matching the model graph to world space based on matched pairs between observed points and model points, temporal smoothing over the resulting estimates may be a good idea. In that respect I would follow your suggestion.
+
+I would think a standalone .py program using the model .txt file and the ...triangulated3d.csv file as input and generating an output file in the format of coords3d.csv used for preprocessing prior to predict...py would be a good intermediate solution prior to training a model including masking.
+
+It could even be that such a solution is better than a DL model with masking capabilities, as the estimation of occluded points with help of model (knowledge) is a valid way to increase knowledge about the observed mice.
+
+Assistant: I’m comparing the rigid model file, the fully observed training-format CSV, and the triangulated 3D estimation file to pin down exactly what a conversion/imputation script would have to do. Then I’ll tell you whether the standalone preprocessor idea is structurally sound.
+
+Assistant: Yes — a standalone conversion/imputation script is a sound intermediate solution, and in your setting it is probably the right next step.
+
+A few concrete things are already clear from the uploaded files and the code.
+
+Your rigid model file defines the same 10 semantic nodes that the predictor expects: `head`, `nose_tip`, ear tips, `tail_root`, `tail_tip`, and four paws. fileciteturn9file0 The predictor/training code expects dense per-frame 3D coordinates for both mice and then builds features from **all** nodes after transforming them into the pair frame; there is no explicit missing-point mask in the current model. fileciteturn6file1
+
+The two CSV formats are close enough that conversion is straightforward:
+
+- training/prediction format: `frame,time,mouse_id,behavior,node,x,y,z`
+- triangulated format: `frame,bodypart,mouse_id,X,Y,Z,kind,num_obs,rms_px,max_err_px,chi2`
+
+So the main differences are:
+- `bodypart` ↔ `node`
+- `X,Y,Z` ↔ `x,y,z`
+- no `time` column in the triangulated file
+- no `behavior` column in the triangulated file
+- extra quality metadata only in the triangulated file
+
+That means the converter should synthesize `time`, probably as `frame / fps`, and can omit `behavior` entirely if you call prediction with `--no-labels`. The current prediction code supports unlabeled input in that case. fileciteturn6file0turn6file1
+
+The more important issue is the missingness itself. I checked the uploaded triangulated CSV against the full 10-node × 2-mouse × 1800-frame expectation and there are 4,296 missing node observations out of 36,000 expected, about 11.9%. Missing points are represented by **absent rows**, not NaNs. The worst case is `tail_tip`, but `tail_root` is also missing 300 times. That matters a lot, because the current preprocessing uses the two `tail_root` points to build the pair frame every frame. If either tail root is absent and you feed the file directly, the current loader will silently leave that coordinate at zero, because it initializes the full array with zeros and only fills nodes that appear in the CSV. There is no built-in occlusion-aware transform estimation. fileciteturn6file1
+
+So the answer to your key implementation question is still: **no, the existing software does not already solve this**. It does not estimate the coordinate transform from a subset of observed nodes. It assumes the required points are already present as dense coordinates.
+
+There is another important structural point. A single rigid transform of the whole mouse is only partially faithful to the data the model was trained on. I checked your supplied `coords_3d.csv`: some inter-node distances are essentially constant, for example `head`–`tail_root`, `head`–`nose_tip`, and `tail_root`–`tail_tip`, which suggests the trunk/head/tail core behaves like a rigid body. But paw-related distances vary noticeably, which means the mouse representation is not globally rigid. So a rigid-fit completion from the model graph is very plausible for the trunk/head/tail, but only an approximation for paws.
+
+That leads to a more precise recommendation.
+
+A standalone converter should not treat the entire 10-node mouse as one perfectly rigid object. The better design is:
+
+First, estimate a body transform from the more rigid landmarks, preferably among `tail_root`, `head`, `nose_tip`, `left_ear_tip`, `right_ear_tip`, and possibly `tail_tip` when reliable. A weighted rigid Procrustes/Kabsch fit is the natural tool. The weights can come from the triangulation quality columns: `num_obs`, `rms_px`, `max_err_px`, `chi2`. Points with `num_obs=3` and low reprojection error should get more weight than pair-only or high-error points.
+
+Second, use that estimated body transform to reconstruct missing rigid landmarks. This is particularly important for `tail_root`, because the downstream pair-frame construction depends on it directly, and for `nose_tip`, because the feature extractor uses `nose_dist` explicitly. fileciteturn6file1
+
+Third, handle paws more carefully. For an initial version, you can fill missing paws from the transformed model coordinates. That will make the file dense and compatible. But for better behavioral fidelity, especially for run/rear discrimination, a better strategy is to estimate or smooth paw locations in the mouse’s body frame over time. In other words: use the rigid body fit to define the local body frame, then temporally smooth paw offsets in that frame and use those smoothed offsets to fill missing paw points. That is much closer to the actual articulated geometry than forcing the paws to sit permanently at canonical model offsets.
+
+So your idea “estimate missing points from the model graph, then temporally smooth” is good, but I would refine it to “estimate a rigid body transform from stable landmarks, then complete rigid landmarks from the model, and complete articulated landmarks with temporal smoothing in body coordinates.”
+
+A second practical detail: the triangulated file contains quality metadata, which is valuable. I would not rely only on presence/absence. A present point can still be poor. In your file, pair-based triangulations are visibly noisier than triplet-based ones. So the converter should have a validity stage, something like: reject or downweight points with bad `rms_px`/`max_err_px`/`chi2`, even if they exist. That will make the transform estimation and the imputation much more stable.
+
+The output format should simply be a predictor-compatible CSV with at least:
+
+`frame,time,mouse_id,node,x,y,z`
+
+You may also choose to include `behavior` as a dummy column filled with `0`, but it is not necessary if you run prediction with `--no-labels`. The current loader can work without labels in that mode. fileciteturn6file0turn6file1
+
+So my assessment is:
+
+- Yes, a standalone converter/imputer is the right intermediate solution.
+- No, the current code does not already do subset-based transform estimation or explicit missing-point masking.
+- Pure rigid completion is likely good for the body core and necessary for stable pair-frame construction.
+- Pure rigid completion is less convincing for paws, so temporal smoothing or body-frame interpolation should be added there.
+- Such a geometric completion stage could very well outperform a masked DL model, at least initially, because it injects a strong and valid structural prior before inference.
+
+The next useful step is to specify the converter precisely: which landmarks are used for the rigid fit, what minimum number of reliable points is required, how to fall back when too few are visible, and how `time` is synthesized from `frame`.
+
+User: I agree with all your suggestions in principle.
+
+Concerning your questions:
+
+time should be estimated with help of an --fps CLI parameter, default 10.
+
+Allow an optional input --ground_truth getting the simulated 3D data in coords3d.csv as input. If given behavior is to be taken from that file and to be included in the output file. Then predict..py could compute accuracy report.
+
+I particularly agree with your suggestion to timewise smooth the paw positions. Whether it helps much in the complicated rearing behavior when the body is upright is hard to predict. But let's see.
+
+Please do not consider the rms_px and chi2 values. They do not seem to be particularly reliable. What is important however, is triplet or pair-based estimates. Triplet is much more valuable than pair and should be considered by weights in the matching procedure.
+
+Concerning which landmarks to use for the rigid fit, you made a good proposal.
+
+The minimum number of reliable points should be 3, i.e. the mathematical minimum. I would even say, the minimum number of points should be 3, ignoring whether they are reliable or not. Because it is better to use the frame than not have it due to zeros occurring in some body parts.
+
+Assistant: I’m pinning down the exact implementation contract from your requirements and the existing code paths, so I can tell you where the standalone converter should align exactly with `predict...py` and where it can be safely extended.
+
+Assistant: Agreed. With your clarifications, the standalone preprocessor now has a fairly clean specification, and it fits the existing predictor well.
+
+The compatibility target is clear from the current code: the predictor expects a `coords_3d.csv`-style file with dense per-frame 3D coordinates, then calls `load_coords_3d_csv_pair(...)`, `preprocess_run(...)`, and finally `predict_probs_per_run(...)`. The loader requires `frame,time,node,x,y,z` and optionally `behavior`, while the predictor will compute reports only when the output file has `behavior` and you do not pass `--no-labels`. fileciteturn10file2turn10file7turn10file19
+
+The rigid model file is also suitable for this plan, because it supplies exactly the expected semantic landmarks in canonical/model space: `head`, `nose_tip`, both ear tips, `tail_root`, `tail_tip`, and the four paws. fileciteturn10file18
+
+So the intermediate solution should be a converter/imputer along these lines.
+
+Call it something like `triangulated3d_to_coords3d.py`. Its CLI should include:
+
+- `--triangulated-3d` for the estimated 3D observations
+- `--mouse-graph` for the canonical node coordinates from `mouse3_mesh_shortTail.txt`
+- `--out-csv` for the generated predictor-compatible file
+- `--fps`, default `10`, to synthesize `time = frame / fps`
+- `--ground-truth` optional; when given, copy `behavior` from that `coords_3d.csv` into the output so `predict_behavior_pair_xlstm.py --report` can evaluate it
+- optional weighting knobs, for example `--pair-weight` and `--triplet-weight`, with triplets weighted more strongly than pairs
+
+That design matches your stated needs and the current predictor’s expectations. fileciteturn10file7turn10file19
+
+The core algorithm should be framewise per mouse.
+
+For each `(frame, mouse_id)`:
+
+1. Gather observed landmarks from the triangulated file.
+2. Split them conceptually into a rigid “body/core” set and articulated paws.
+3. Estimate a rigid transform from model space to world space using the observed core landmarks.
+4. Use that transform to reconstruct missing core landmarks, especially `tail_root`, `nose_tip`, and `head`.
+5. For paws, use observed values when present; when absent, fill them from temporally smoothed paw offsets in body coordinates, not just from the static model coordinate.
+6. Write a dense `coords_3d.csv` row for every required node.
+
+This is the right structure because the downstream preprocessing constructs the pair frame from the two `tail_root` points every frame. If `tail_root` is absent or wrong, the whole pair-frame transform degrades. fileciteturn10file3turn10file4
+
+On weighting, your choice to ignore `rms_px` and `chi2` is reasonable if they are not trustworthy. Using triplet-vs-pair as the main quality signal is a cleaner rule. I would make triplet observations carry a stronger weight in the rigid fit than pair observations. A simple and defensible starting point is something like weight 3 for triplets and weight 1 for pairs. That is only a starting default, not something mathematically sacred.
+
+On the minimum-point rule, one correction matters. In exact 3D rigid alignment, “3 points” is only sufficient when they are not degenerate. If the three visible points are collinear or nearly collinear, the fit becomes unstable or underconstrained in rotation. So I would adopt your preference in spirit — use frames aggressively rather than dropping them — but with this refinement:
+
+- if there are at least 3 observed points, attempt the fit
+- if the geometry is poorly conditioned, regularize with the previous frame’s transform, or fix the ambiguous residual rotation using a convention such as world up or the previous-body orientation
+
+That keeps your “better to use the frame than output zeros” principle, while avoiding obviously unstable solves.
+
+For the paws, your intuition about rearing is correct: simple rigid completion may be weakest precisely there. The better approach is body-frame temporal smoothing:
+
+- once the body transform is estimated, map each observed paw into body coordinates
+- smooth those body-frame paw trajectories over time
+- use the smoothed body-frame position when the paw is missing
+- transform back to world space for output
+
+That preserves articulated behavior much better than forcing paws to their canonical model positions.
+
+A practical fallback hierarchy would be:
+
+- observed point, if present
+- reconstructed from body-frame paw smoothing, if available
+- otherwise transformed canonical model position
+- if even the body transform is not available, fall back to previous frame propagated forward
+
+That is much safer than the current loader behavior, which would otherwise silently leave missing nodes at zeros in the dense position tensor. fileciteturn10file2turn10file3
+
+The ground-truth option should work like this:
+
+- load the optional simulated `coords_3d.csv`
+- map `behavior` by `(frame, mouse_id)`
+- copy those `behavior` values into the output rows
+- then run `predict_behavior_pair_xlstm.py --report` on the converted output
+
+That is directly aligned with how the predictor decides whether reports can be computed. fileciteturn10file7turn10file19
+
+So the final design choice is now fairly crisp:
+
+The converter should generate a dense file in the exact training/prediction format, estimate body transforms from visible core landmarks with pair/triplet weighting, reconstruct missing core landmarks from the rigid model, reconstruct missing paws from temporally smoothed body-frame paw trajectories, synthesize time from `--fps`, and optionally copy `behavior` from a ground-truth file for evaluation.
+
+That is a strong intermediate solution, and it should preserve compatibility with the current learned model much better than feeding sparse or zero-filled observations into a network trained on dense synthetic coordinates.
+
+User: I agree with all your explanations. Particularly important is the discussion on degenerate tree point settings. The rigid points head, tail_root and tail_tip are almost on a line such that the model in the estimated transformation could rotate around that line. So it would be important to use the ear tips too. Or may be even the moving paws. This is not as bad as it seems in running or interaction behavior, as the paws do not move much. The rearing behavior may be difficult though. Then the deviation of the head tail_root line from its model angle against up-direction could help in assuming the paws to hang loosely downwards.
+
+But in doubt I would opt for keeping the code simple, in order to avoid unwanted/unforeseeable effects.
+
+If you agree, please already start coding.
+
+Assistant: I’m checking the exact row structure of the triangulated file and the training-format file so the converter writes the right schema and handles missing rows the same way the current predictor expects.
+
+Assistant: I’ve got the algorithm pinned down: weighted rigid fit from stable landmarks first, paw-gap filling in body coordinates second, and exact predictor-compatible CSV output. I’m coding it as a standalone converter so you can try it before touching the trained model.
+
+Assistant: The converter runs on your uploaded files and produces a dense predictor-style CSV. I’m doing one more sanity check: feeding that generated file into the existing predictor to confirm the format is accepted end-to-end.
+
+Assistant: I started coding it.
+
+I created a standalone converter here:
+
+[triangulated3d_to_coords3d.py](sandbox:/mnt/data/triangulated3d_to_coords3d.py)
+
+I also ran it on your uploaded files and produced a sample dense output here:
+
+[converted_coords_3d.csv](sandbox:/mnt/data/converted_coords_3d.csv)
+
+What the script does:
+
+- reads `triangulated3d.csv`
+- reads the canonical mouse landmarks from `mouse3_mesh_shortTail.txt` fileciteturn11file0
+- estimates a per-frame rigid transform for each mouse
+- prefers the more rigid landmarks `head`, `nose_tip`, both ear tips, `tail_root`, `tail_tip`
+- supplements with paws only when needed or when the rigid set is geometrically weak
+- weights `triplet` observations more than `pair` observations
+- reconstructs missing rigid landmarks from the fitted transform
+- fills missing paws from temporally smoothed paw positions in body coordinates
+- writes a dense predictor-compatible `coords_3d.csv`-style file
+- optionally copies `behavior` from a ground-truth `coords_3d.csv`, which matches how the predictor decides whether reporting is possible fileciteturn11file11turn11file17
+
+This is aligned with the current predictor/training code, which expects dense `frame,time,mouse_id,node,x,y,z` input, optionally with `behavior`, and otherwise would silently leave missing nodes at zero in the loaded tensor. fileciteturn11file5turn11file12
+
+The current learned pipeline still builds its pair frame from the two `tail_root` points and then preprocesses all dense coordinates from there, so filling `tail_root` robustly is especially important. fileciteturn11file12turn11file2
+
+The main CLI is:
+
+```bash
+python triangulated3d_to_coords3d.py \
+  --triangulated-3d tuneB_triangulated3d.csv \
+  --mouse-graph mouse3_mesh_shortTail.txt \
+  --out-csv converted_coords_3d.csv \
+  --fps 10 \
+  --ground-truth coords_3d.csv
+```
+
+Relevant defaults currently are:
+
+- `--fps 10`
+- `--pair-weight 1.0`
+- `--triplet-weight 3.0`
+- `--min-fit-points 3`
+- `--paw-smooth-window 5`
+
+A few design choices in this first version:
+
+- it keeps the code relatively simple
+- it does not smooth the rigid body transform itself over time
+- it does not use `rms_px` or `chi2`
+- it uses previous-frame rotation as a fallback when the visible landmark set is too weak or degenerate, instead of emitting zeros
+- observed points are preserved; imputation is used only for missing points
+
+I was able to run the converter itself successfully on your uploaded triangulated file. I could not run the final prediction step from inside this container against your local conda environment, so I did not claim an end-to-end predictor test here.
+
+A good next move is for you to run exactly these two commands in `mouse_sim_fix`:
+
+```bash
+python triangulated3d_to_coords3d.py \
+  --triangulated-3d tuneB_triangulated3d.csv \
+  --mouse-graph mouse3_mesh_shortTail.txt \
+  --out-csv converted_coords_3d.csv \
+  --fps 10 \
+  --ground-truth coords_3d.csv
+```
+
+```bash
+python predict_behavior_pair_xlstm.py \
+  --ckpt out_pair_train2/behavior_pair_lstm.pt \
+  --coords-3d converted_coords_3d.csv \
+  --out-dir out_pair_pred_from_triangulated \
+  --report
+```
+
+The first thing I would inspect after that is whether the converted predictions are plausible around rearing bouts, because paw completion is where this simple first version is most likely to need refinement.
+
+User: Incredible, isn't it:
+
+#prediction on training data
+(mouse_sim_fix) hellwich@Artemis:~/hellwich/sdk3/mouseModel/mouse_sim$ python predict_behavior_pair_xlstm.py   --ckpt out_pair_train2/behavior_pair_lstm.pt   --coords-3d out_pair/coords_3d.csv   --out-dir out_pair_pred_with_report   --report
+device: cuda
+gpu: NVIDIA GeForce RTX 4090 Laptop GPU
+wrote: out_pair_pred_with_report/ethogram_pred_out_pair.csv
+
+== out_pair ==
+Interaction f1: 0.9815
+              precision    recall  f1-score   support
+
+           0     0.9813    0.9342    0.9572      1855
+           1     0.9712    0.9920    0.9815      4145
+
+    accuracy                         0.9742      6000
+   macro avg     0.9762    0.9631    0.9693      6000
+weighted avg     0.9743    0.9742    0.9740      6000
+
+Rear0 f1 (non-interaction): 0.9613
+              precision    recall  f1-score   support
+
+           0     0.9960    1.0000    0.9980      1761
+           1     1.0000    0.9255    0.9613        94
+
+    accuracy                         0.9962      1855
+   macro avg     0.9980    0.9628    0.9797      1855
+weighted avg     0.9962    0.9962    0.9962      1855
+
+Rear1 f1 (non-interaction): 0.9311
+              precision    recall  f1-score   support
+
+           0     0.9941    0.9935    0.9938      1703
+           1     0.9281    0.9342    0.9311       152
+
+    accuracy                         0.9887      1855
+   macro avg     0.9611    0.9639    0.9625      1855
+weighted avg     0.9887    0.9887    0.9887      1855
+
+Ethograms written to: out_pair_pred_with_report
+
+
+#prediction on test data (direct 3D simulation output; not on 3D reconstruction from image-based DLC body part extraction)
+(mouse_sim_fix) hellwich@Artemis:~/hellwich/sdk3/mouseModel/mouse_sim$ python predict_behavior_pair_xlstm.py   --ckpt out_pair_train2/behavior_pair_lstm.pt   --coords-3d out2m_2/coords_3d.csv   --out-dir out2m_2_pred   --report
+device: cuda
+gpu: NVIDIA GeForce RTX 4090 Laptop GPU
+wrote: out2m_2_pred/ethogram_pred_out2m_2.csv
+
+== out2m_2 ==
+Interaction f1: 0.6276
+              precision    recall  f1-score   support
+
+           0     0.9814    0.7085    0.8230      1417
+           1     0.4685    0.9504    0.6276       383
+
+    accuracy                         0.7600      1800
+   macro avg     0.7249    0.8295    0.7253      1800
+weighted avg     0.8723    0.7600    0.7814      1800
+
+Rear0 f1 (non-interaction): 0.8369
+              precision    recall  f1-score   support
+
+           0     0.9831    1.0000    0.9915      1335
+           1     1.0000    0.7195    0.8369        82
+
+    accuracy                         0.9838      1417
+   macro avg     0.9915    0.8598    0.9142      1417
+weighted avg     0.9840    0.9838    0.9825      1417
+
+Rear1 f1 (non-interaction): 0.8316
+              precision    recall  f1-score   support
+
+           0     0.9820    0.9939    0.9879      1314
+           1     0.9080    0.7670    0.8316       103
+
+    accuracy                         0.9774      1417
+   macro avg     0.9450    0.8805    0.9097      1417
+weighted avg     0.9766    0.9774    0.9765      1417
+
+Ethograms written to: out2m_2_pred
+
+
+#prediction on test data (3D reconstruction from DLC 2D image observations of body parts)
+(mouse_sim_fix) hellwich@Artemis:~/hellwich/sdk3/mouseModel/mouse_sim$ python predict_behavior_pair_xlstm.py \
+  --ckpt out_pair_train2/behavior_pair_lstm.pt \
+  --coords-3d converted_coords_3d.csv \
+  --out-dir out2m_2_pred/from_imputed \
+  --report
+device: cuda
+gpu: NVIDIA GeForce RTX 4090 Laptop GPU
+wrote: out2m_2_pred/from_imputed/ethogram_pred_converted_coords_3d.csv.csv
+
+== converted_coords_3d.csv ==
+Interaction f1: 0.6147
+              precision    recall  f1-score   support
+
+           0     0.9800    0.6930    0.8119      1417
+           1     0.4549    0.9478    0.6147       383
+
+    accuracy                         0.7472      1800
+   macro avg     0.7175    0.8204    0.7133      1800
+weighted avg     0.8683    0.7472    0.7700      1800
+
+Rear0 f1 (non-interaction): 0.8116
+              precision    recall  f1-score   support
+
+           0     0.9809    1.0000    0.9904      1335
+           1     1.0000    0.6829    0.8116        82
+
+    accuracy                         0.9817      1417
+   macro avg     0.9904    0.8415    0.9010      1417
+weighted avg     0.9820    0.9817    0.9800      1417
+
+Rear1 f1 (non-interaction): 0.8066
+              precision    recall  f1-score   support
+
+           0     0.9776    0.9962    0.9868      1314
+           1     0.9359    0.7087    0.8066       103
+
+    accuracy                         0.9753      1417
+   macro avg     0.9567    0.8525    0.8967      1417
+weighted avg     0.9746    0.9753    0.9737      1417
+
+Ethograms written to: out2m_2_pred/from_imputed
+
+Assistant: Yes — and the interesting part is *where* the performance changed.
+
+The striking result is that the image-based reconstruction plus imputation is only slightly worse than the direct 3D simulation output, despite missing points and the whole conversion step.
+
+Comparing direct test 3D vs imputed-from-DLC 3D:
+
+- **Interaction F1:** 0.6276 → 0.6147, a drop of only **0.0129**
+- **Rear0 F1:** 0.8369 → 0.8116, a drop of **0.0253**
+- **Rear1 F1:** 0.8316 → 0.8066, a drop of **0.0250**
+
+That is a very small penalty for going through rendering, DLC detection, triangulation, missing-point recovery, and smoothing.
+
+The deeper conclusion is that the main problem is **not** the imputation step. The dominant gap is earlier:
+
+- training data: **interaction F1 0.9815**
+- direct unseen simulated test data: **interaction F1 0.6276**
+- reconstructed/imputed test data: **interaction F1 0.6147**
+
+So the big drop already happens when moving from training distribution to new test behavior sequences. The reconstruction/imputation stage adds only a modest extra loss on top of that.
+
+There is another useful pattern in the numbers. For interaction, recall barely changed:
+
+- direct: **0.9504**
+- imputed: **0.9478**
+
+But precision fell a bit:
+
+- direct: **0.4685**
+- imputed: **0.4549**
+
+So the reconstructed pipeline is still finding almost all interaction frames, but it introduces a few more false positives. That is actually a good sign for the geometric completion: it preserved the strong interaction cue structure quite well.
+
+For rearing, the pattern is different. The imputed version became slightly more conservative:
+
+- **Rear0 recall:** 0.7195 → 0.6829
+- **Rear1 recall:** 0.7670 → 0.7087
+
+Precision stayed very high or even improved a bit for rear1. That suggests the paw/body completion is smoothing away some marginal rearing evidence rather than creating noisy false rearing detections. In other words, the current imputation likely favors stable body geometry over subtle limb excursions. That is exactly where one would expect the first-generation converter to lose a little.
+
+So, conceptually, your intermediate solution is validated.
+
+It means:
+
+- the current predictor is robust enough to tolerate reconstructed/imputed 3D input
+- the rigid-model prior is useful rather than harmful
+- a geometry-aware completion stage can indeed be competitive with, and perhaps preferable to, a masking-only DL solution in this setting
+
+Also, your result supports the earlier concern that the current model depends heavily on stable `tail_root`-based pair-frame construction. The fact that performance stayed so close implies that the converter is already recovering the key frame-defining landmarks sufficiently well for inference. The code path indeed builds the pair frame from the two `tail_root` points and then derives all features from those transformed coordinates. fileciteturn6file1
+
+So my assessment is: this is not merely “working”; it is a strong proof of concept.
+
+The most promising next refinement is not a complete redesign. It is likely a targeted improvement of the converter around **rearing recall**, especially paw/body-frame temporal completion in upright phases. That is where the remaining gap seems to concentrate.
+
+User: I compared xlstm, transformer and lstm DL models. May be you also want to comment on it:
+
+(mouse_sim_fix) hellwich@Artemis:~/hellwich/sdk3/mouseModel/mouse_sim$ python predict_behavior_pair_xlstm.py   --ckpt out_pair_train2/behavior_pair_xlstm.pt   --coords-3d converted_coords_3d.csv   --out-dir out2m_2_pred/from_imputed/xlstm   --report
+device: cuda
+gpu: NVIDIA GeForce RTX 4090 Laptop GPU
+{'verbose': True, 'with_cuda': True, 'extra_ldflags': ['-L/usr/local/cuda-12.8/lib', '-lcublas'], 'extra_cflags': ['-DSLSTM_HIDDEN_SIZE=128', '-DSLSTM_BATCH_SIZE=8', '-DSLSTM_NUM_HEADS=4', '-DSLSTM_NUM_STATES=4', '-DSLSTM_DTYPE_B=float', '-DSLSTM_DTYPE_R=__nv_bfloat16', '-DSLSTM_DTYPE_W=__nv_bfloat16', '-DSLSTM_DTYPE_G=__nv_bfloat16', '-DSLSTM_DTYPE_S=__nv_bfloat16', '-DSLSTM_DTYPE_A=float', '-DSLSTM_NUM_GATES=4', '-DSLSTM_SIMPLE_AGG=true', '-DSLSTM_GRADIENT_RECURRENT_CLIPVAL_VALID=false', '-DSLSTM_GRADIENT_RECURRENT_CLIPVAL=0.0', '-DSLSTM_FORWARD_CLIPVAL_VALID=false', '-DSLSTM_FORWARD_CLIPVAL=0.0', '-U__CUDA_NO_HALF_OPERATORS__', '-U__CUDA_NO_HALF_CONVERSIONS__', '-U__CUDA_NO_BFLOAT16_OPERATORS__', '-U__CUDA_NO_BFLOAT16_CONVERSIONS__', '-U__CUDA_NO_BFLOAT162_OPERATORS__', '-U__CUDA_NO_BFLOAT162_CONVERSIONS__'], 'extra_cuda_cflags': ['-Xptxas="-v"', '-gencode', 'arch=compute_80,code=compute_80', '-res-usage', '--use_fast_math', '-O3', '-Xptxas -O3', '--extra-device-vectorization', '-DSLSTM_HIDDEN_SIZE=128', '-DSLSTM_BATCH_SIZE=8', '-DSLSTM_NUM_HEADS=4', '-DSLSTM_NUM_STATES=4', '-DSLSTM_DTYPE_B=float', '-DSLSTM_DTYPE_R=__nv_bfloat16', '-DSLSTM_DTYPE_W=__nv_bfloat16', '-DSLSTM_DTYPE_G=__nv_bfloat16', '-DSLSTM_DTYPE_S=__nv_bfloat16', '-DSLSTM_DTYPE_A=float', '-DSLSTM_NUM_GATES=4', '-DSLSTM_SIMPLE_AGG=true', '-DSLSTM_GRADIENT_RECURRENT_CLIPVAL_VALID=false', '-DSLSTM_GRADIENT_RECURRENT_CLIPVAL=0.0', '-DSLSTM_FORWARD_CLIPVAL_VALID=false', '-DSLSTM_FORWARD_CLIPVAL=0.0', '-U__CUDA_NO_HALF_OPERATORS__', '-U__CUDA_NO_HALF_CONVERSIONS__', '-U__CUDA_NO_BFLOAT16_OPERATORS__', '-U__CUDA_NO_BFLOAT16_CONVERSIONS__', '-U__CUDA_NO_BFLOAT162_OPERATORS__', '-U__CUDA_NO_BFLOAT162_CONVERSIONS__']}
+Using /home/hellwich/.cache/torch_extensions/py311_cu121 as PyTorch extensions root...
+Detected CUDA files, patching ldflags
+Emitting ninja build file /home/hellwich/.cache/torch_extensions/py311_cu121/slstm_HS128BS8NH4NS4DBfDRbDWbDGbDSbDAfNG4SA1GRCV0GRC0d0FCV0FC0d0/build.ninja...
+Building extension module slstm_HS128BS8NH4NS4DBfDRbDWbDGbDSbDAfNG4SA1GRCV0GRC0d0FCV0FC0d0...
+Allowing ninja to set a default number of workers... (overridable by setting the environment variable MAX_JOBS=N)
+ninja: no work to do.
+Loading extension module slstm_HS128BS8NH4NS4DBfDRbDWbDGbDSbDAfNG4SA1GRCV0GRC0d0FCV0FC0d0...
+wrote: out2m_2_pred/from_imputed/xlstm/ethogram_pred_converted_coords_3d.csv.csv
+
+== converted_coords_3d.csv ==
+Interaction f1: 0.6702
+              precision    recall  f1-score   support
+
+           0     0.9460    0.8278    0.8830      1417
+           1     0.5643    0.8251    0.6702       383
+
+    accuracy                         0.8272      1800
+   macro avg     0.7551    0.8264    0.7766      1800
+weighted avg     0.8648    0.8272    0.8377      1800
+
+Rear0 f1 (non-interaction): 0.6776
+              precision    recall  f1-score   support
+
+           0     0.9848    0.9708    0.9777      1335
+           1     0.6139    0.7561    0.6776        82
+
+    accuracy                         0.9584      1417
+   macro avg     0.7993    0.8634    0.8277      1417
+weighted avg     0.9633    0.9584    0.9604      1417
+
+Rear1 f1 (non-interaction): 0.8293
+              precision    recall  f1-score   support
+
+           0     0.9863    0.9871    0.9867      1314
+           1     0.8333    0.8252    0.8293       103
+
+    accuracy                         0.9753      1417
+   macro avg     0.9098    0.9062    0.9080      1417
+weighted avg     0.9752    0.9753    0.9752      1417
+
+Ethograms written to: out2m_2_pred/from_imputed/xlstm
+(mouse_sim_fix) hellwich@Artemis:~/hellwich/sdk3/mouseModel/mouse_sim$ python predict_behavior_pair_xlstm.py   --ckpt out_pair_train2/behavior_pair_transformer.pt   --coords-3d converted_coords_3d.csv   --out-dir out2m_2_pred/from_imputed/transformer   --report
+device: cuda
+gpu: NVIDIA GeForce RTX 4090 Laptop GPU
+wrote: out2m_2_pred/from_imputed/transformer/ethogram_pred_converted_coords_3d.csv.csv
+
+== converted_coords_3d.csv ==
+Interaction f1: 0.7240
+              precision    recall  f1-score   support
+
+           0     0.9822    0.8200    0.8938      1417
+           1     0.5867    0.9452    0.7240       383
+
+    accuracy                         0.8467      1800
+   macro avg     0.7845    0.8826    0.8089      1800
+weighted avg     0.8981    0.8467    0.8577      1800
+
+Rear0 f1 (non-interaction): 0.8286
+              precision    recall  f1-score   support
+
+           0     0.9823    1.0000    0.9911      1335
+           1     1.0000    0.7073    0.8286        82
+
+    accuracy                         0.9831      1417
+   macro avg     0.9912    0.8537    0.9098      1417
+weighted avg     0.9834    0.9831    0.9817      1417
+
+Rear1 f1 (non-interaction): 0.8432
+              precision    recall  f1-score   support
+
+           0     0.9813    0.9970    0.9891      1314
+           1     0.9512    0.7573    0.8432       103
+
+    accuracy                         0.9795      1417
+   macro avg     0.9662    0.8771    0.9161      1417
+weighted avg     0.9791    0.9795    0.9785      1417
+
+Ethograms written to: out2m_2_pred/from_imputed/transformer
+(mouse_sim_fix) hellwich@Artemis:~/hellwich/sdk3/mouseModel/mouse_sim$ python predict_behavior_pair_xlstm.py   --ckpt out_pair_train2/behavior_pair_lstm.pt   --coords-3d converted_coords_3d.csv   --out-dir out2m_2_pred/from_imputed/lstm   --report
+device: cuda
+gpu: NVIDIA GeForce RTX 4090 Laptop GPU
+wrote: out2m_2_pred/from_imputed/lstm/ethogram_pred_converted_coords_3d.csv.csv
+
+== converted_coords_3d.csv ==
+Interaction f1: 0.6147
+              precision    recall  f1-score   support
+
+           0     0.9800    0.6930    0.8119      1417
+           1     0.4549    0.9478    0.6147       383
+
+    accuracy                         0.7472      1800
+   macro avg     0.7175    0.8204    0.7133      1800
+weighted avg     0.8683    0.7472    0.7700      1800
+
+Rear0 f1 (non-interaction): 0.8116
+              precision    recall  f1-score   support
+
+           0     0.9809    1.0000    0.9904      1335
+           1     1.0000    0.6829    0.8116        82
+
+    accuracy                         0.9817      1417
+   macro avg     0.9904    0.8415    0.9010      1417
+weighted avg     0.9820    0.9817    0.9800      1417
+
+Rear1 f1 (non-interaction): 0.8066
+              precision    recall  f1-score   support
+
+           0     0.9776    0.9962    0.9868      1314
+           1     0.9359    0.7087    0.8066       103
+
+    accuracy                         0.9753      1417
+   macro avg     0.9567    0.8525    0.8967      1417
+weighted avg     0.9746    0.9753    0.9737      1417
+
+Ethograms written to: out2m_2_pred/from_imputed/lstm
+
+Assistant: Yes — this comparison is meaningful, and it is more decisive than it may look at first glance.
+
+On the imputed 3D data, the **transformer is clearly the best of the three**:
+
+- **Interaction F1**: transformer **0.7240** > xLSTM **0.6702** > LSTM **0.6147**
+- **Rear0 F1**: transformer **0.8286** > LSTM **0.8116** > xLSTM **0.6776**
+- **Rear1 F1**: transformer **0.8432** > xLSTM **0.8293** > LSTM **0.8066**
+
+So on this realistic, noisy, partially reconstructed input, the transformer wins on **all three tasks**.
+
+That matters because all three models use the **same preprocessing and the same multitask head structure**; what changes is mainly the backbone: bidirectional LSTM, transformer encoder, or xLSTM stack. The training code also routes all of them through the same pair-frame feature construction and the same three-output head. fileciteturn6file0turn6file1
+
+The most informative number is probably interaction precision/recall.
+
+For the three models on imputed input:
+
+- **LSTM**: precision **0.4549**, recall **0.9478**
+- **xLSTM**: precision **0.5643**, recall **0.8251**
+- **transformer**: precision **0.5867**, recall **0.9452**
+
+So the transformer gets almost the LSTM’s very high recall, but with a much better precision. That is why its interaction F1 jumps so much. In practical terms, it keeps finding most true interactions without hallucinating as many extra ones.
+
+That suggests a plausible interpretation:
+
+- **LSTM** is too eager to call interaction once it sees enough relative-motion evidence. It generalizes poorly under reconstruction noise and produces too many false positives.
+- **xLSTM** is more selective, which raises precision, but it sacrifices too much recall, especially on interaction and very strongly on `rear0`.
+- **transformer** strikes the best balance and appears most robust to the distribution shift introduced by rendering, DLC extraction, triangulation, missing points, and your geometric completion.
+
+This is exactly the kind of regime where I would expect attention to help: your features are dense, structured, and include all keypoints of both mice plus relative motion in the pair frame. A transformer can reweight information across the full window more flexibly than a plain LSTM. The model definitions support that architectural reading: the transformer backbone embeds the full feature vector, adds positional encoding, and processes the entire sequence through self-attention, whereas the LSTM uses recurrent compression and the xLSTM uses its own recurrent block stack. fileciteturn6file1
+
+There is also a second-order pattern in the rearing scores.
+
+The xLSTM is not uniformly weaker; it is specifically bad on **Rear0** here:
+
+- xLSTM Rear0 F1: **0.6776**
+- xLSTM Rear1 F1: **0.8293**
+
+That asymmetry is suspicious. Since training uses swap augmentation intended to reduce dependence on mouse index, a strong difference between rear0 and rear1 on one test set may indicate that the xLSTM checkpoint learned a more fragile asymmetry than the transformer did, or that the imputation noise interacts with one mouse’s reconstructed trajectories differently. The preprocessing/training code explicitly constructs swapped versions and swaps the individual labels for augmentation, so perfect symmetry is not guaranteed, but the model is encouraged toward it. fileciteturn6file1
+
+The bigger-picture conclusion is this:
+
+- the **imputation pipeline is good enough** that model choice now matters a lot
+- the **transformer is currently your best deployment model**
+- the **LSTM is the weakest under reconstruction noise**
+- the **xLSTM is promising for interaction, but unstable on one of the individual rearing heads**
+
+So if the goal is “best current end-to-end behavior classification on reconstructed 3D,” I would use the **transformer checkpoint**.
+
+I would also draw one methodological lesson: your earlier result already showed that the gap from direct test 3D to imputed 3D was modest for the LSTM. Now this model comparison shows that a better backbone can recover a lot more performance without changing the reconstruction stage. That means the bottleneck is no longer only the geometric converter; part of it is definitely the learned temporal model.
+
+My concise ranking for your current pipeline is:
+
+1. **Transformer** — best overall, best balanced precision/recall, best candidate for realistic data  
+2. **xLSTM** — better than LSTM for interaction, but unstable on `rear0`  
+3. **LSTM** — workable baseline, but clearly least robust on reconstructed input
+
+The next experiment I would prioritize is simple: run the **transformer** on the direct non-imputed test 3D as well. That will tell you whether its advantage is general, or specifically a robustness advantage under reconstruction/imputation noise.
+
+User: (mouse_sim_fix) hellwich@Artemis:~/hellwich/sdk3/mouseModel/mouse_sim$ python predict_behavior_pair_xlstm.py   --ckpt out_pair_train2/behavior_pair_transformer.pt   --coords-3d out2m_2/coords_3d.csv   --out-dir out2m_2_pred/from_simulated/transformer   --report
+device: cuda
+gpu: NVIDIA GeForce RTX 4090 Laptop GPU
+wrote: out2m_2_pred/from_simulated/transformer/ethogram_pred_out2m_2.csv
+
+== out2m_2 ==
+Interaction f1: 0.7271
+              precision    recall  f1-score   support
+
+           0     0.9847    0.8193    0.8945      1417
+           1     0.5878    0.9530    0.7271       383
+
+    accuracy                         0.8478      1800
+   macro avg     0.7862    0.8862    0.8108      1800
+weighted avg     0.9003    0.8478    0.8588      1800
+
+Rear0 f1 (non-interaction): 0.8611
+              precision    recall  f1-score   support
+
+           0     0.9852    1.0000    0.9926      1335
+           1     1.0000    0.7561    0.8611        82
+
+    accuracy                         0.9859      1417
+   macro avg     0.9926    0.8780    0.9268      1417
+weighted avg     0.9861    0.9859    0.9850      1417
+
+Rear1 f1 (non-interaction): 0.8743
+              precision    recall  f1-score   support
+
+           0     0.9828    1.0000    0.9913      1314
+           1     1.0000    0.7767    0.8743       103
+
+    accuracy                         0.9838      1417
+   macro avg     0.9914    0.8883    0.9328      1417
+weighted avg     0.9840    0.9838    0.9828      1417
+
+Ethograms written to: out2m_2_pred/from_simulated/transformer
+
+Assistant: I’m checking the exact model-building lines so I can tie the interpretation of the new transformer result back to the training code rather than just the metrics.
+
+Assistant: That sharpens the conclusion a lot.
+
+The transformer is not merely “best on imputed input.” It is best **in general** on this task family, and its advantage survives the move from clean simulated 3D to reconstructed/imputed 3D.
+
+The strongest result is this comparison for the transformer:
+
+- **Simulated test 3D**
+  - Interaction F1: **0.7271**
+  - Rear0 F1: **0.8611**
+  - Rear1 F1: **0.8743**
+
+- **Imputed reconstructed 3D**
+  - Interaction F1: **0.7240**
+  - Rear0 F1: **0.8286**
+  - Rear1 F1: **0.8432**
+
+So the reconstruction/imputation penalty for the transformer is very small:
+- interaction: **-0.0031**
+- rear0: **-0.0325**
+- rear1: **-0.0311**
+
+That is a strong result. It means your converter is preserving almost all of the interaction-relevant information, and most of the remaining loss sits in the individual rearing heads.
+
+The most striking part is interaction precision/recall. For transformer:
+
+- simulated: precision **0.5878**, recall **0.9530**
+- imputed: precision **0.5867**, recall **0.9452**
+
+Those are almost the same. So for interaction detection, the image→DLC→triangulation→imputation pipeline is barely hurting the model at all.
+
+That is much stronger evidence than before that the geometric completion stage is doing the right thing for the cues the interaction head cares about. Since the predictor always runs the same preprocessing after loading the dense coordinates — including `preprocess_run(...)` and `predict_probs_per_run(...)` — this near invariance means the converted file is landing very close to the simulated file in the learned feature space. fileciteturn12file11turn12file5
+
+The rearing heads still show the expected sensitivity:
+
+- rear0 drops by about **0.03**
+- rear1 drops by about **0.03**
+
+That is exactly where I would expect the current converter to lose information, because rearing is more dependent on subtle body-shape and paw configuration cues, while interaction is dominated more by relative arrangement and pairwise motion. Your current converter reconstructs rigid/core geometry very well and fills paws reasonably, but not perfectly.
+
+This also clarifies the model ranking.
+
+On imputed input:
+- transformer: **0.7240 / 0.8286 / 0.8432**
+- xLSTM: **0.6702 / 0.6776 / 0.8293**
+- LSTM: **0.6147 / 0.8116 / 0.8066**
+
+Now with the transformer’s simulated-input result added, the picture is:
+
+- **Transformer** is the clear deployment choice.
+- **LSTM** is not competitive under your current distribution shift.
+- **xLSTM** improves interaction over LSTM, but is unstable on Rear0 and still clearly behind transformer overall.
+
+That interpretation is consistent with the code structure: all three variants share the same feature pipeline and the same multitask head; the backbone is what changes. The prediction script reconstructs the backbone from the checkpoint’s `model_type`, then wraps it in the same `MultiTaskHead`. fileciteturn12file1turn12file2turn12file4turn12file7
+
+So the practical conclusion is now quite solid:
+
+Your geometry-aware converter is already good enough that **model choice matters more than conversion noise** for interaction detection, and the **transformer is the best current model** for both direct simulated 3D and reconstructed/imputed 3D.
+
+If I reduce this to one sentence: the converter is no longer the bottleneck for interaction; the remaining bottleneck is mostly the individual-rearing modeling.
+
+The next refinement I would prioritize is not a new backbone. It is targeted converter work for rearing-sensitive cues, especially paw completion during upright phases. The transformer has already shown that the rest of the pipeline is strong.
+
+User: mouse_sim2.py renders the simulated mice behavior to videos containing the skeletons defined by the mouse...txt graph model definition. visualize...py superimposes the skeletons to input video writing to output video. Please code a simple combination of the two programs to a new standalone python program that reads a coords3D.csv file with frame-wise body parts (e.g. the imputed data we just discussed) and superimposes the skeletons to three videos with cameras defined by the cameras.json file uploaded.
+
+So the parameters should be e.g.
+
+--coords-3d out2m_4/coords_3d.csv   --cameras out2m_4/cameras.json 
+
+as in mouse_sim2.py and 
+
+--template ../../mouse_sim/mouse3_mesh_shortTail.txt   --topIn ../../mouse_sim/out2m_2_render/cam1_top.mp4 --frontIn ../../mouse_sim/out2m_2_render/cam2_front.mp4 --sideIn ../../mouse_sim/out2m_2_render/cam3_side.mp4   --topOut top_overlay.mp4 --frontOut front_overlay.mp4 --sideOut side_overlay.mp4   --joinedVideo joined_overlay.mp4   --mouse0-bgr 0,255,0 --mouse1-bgr 0,0,255
+
+as in visualize...py
+
+In addition to the single videos with superimposition a joined video shall be written as in visualize..py.
+
+This program would allow to visualize the 3D reconstruction including the imputation.
+
+If you have questions, if I missed any explanation, please ask before coding.
+
+Assistant: I’m checking the full uploaded code for the camera-loading and video-joining details so the new script matches the existing input conventions instead of only approximating them.
+
+Assistant: I’ve got enough from the existing code to implement it cleanly. I’m checking the exact input CSV headers once so the new script tolerates both labeled and unlabeled `coords_3d.csv` files.
+
+Assistant: Done.
+
+I created the standalone script here:
+
+[overlay_coords3d_on_videos.py](sandbox:/mnt/data/overlay_coords3d_on_videos.py)
+
+It follows the existing conventions from your files:
+
+- camera loading/projection and joined-video layout from `visualize_dlc_vs_reprojected3d_v4.py` fileciteturn14file8turn14file2
+- skeleton template `[EDGES]` handling and `coords_3d.csv` semantics from `mouse_sim2.py` and your template file fileciteturn14file12turn13file2
+- default camera names `cam1_top`, `cam2_front`, `cam3_side`, matching your `cameras.json` and prior pipeline usage. fileciteturn14file3turn14file4turn14file5
+
+Example usage:
+
+```bash
+python overlay_coords3d_on_videos.py \
+  --coords-3d out2m_4/coords_3d.csv \
+  --cameras out2m_4/cameras.json \
+  --template ../../mouse_sim/mouse3_mesh_shortTail.txt \
+  --topIn ../../mouse_sim/out2m_2_render/cam1_top.mp4 \
+  --frontIn ../../mouse_sim/out2m_2_render/cam2_front.mp4 \
+  --sideIn ../../mouse_sim/out2m_2_render/cam3_side.mp4 \
+  --topOut top_overlay.mp4 \
+  --frontOut front_overlay.mp4 \
+  --sideOut side_overlay.mp4 \
+  --joinedVideo joined_overlay.mp4 \
+  --mouse0-bgr 0,255,0 \
+  --mouse1-bgr 0,0,255
+```
+
+It accepts ordinary dense `coords_3d.csv` input, including your imputed file format, and ignores the optional `behavior` column if present. The script writes the three overlaid videos plus the joined mosaic video.
+
+I checked that the script compiles cleanly. I did not run a full video render here because your referenced input MP4s are not present in this container.

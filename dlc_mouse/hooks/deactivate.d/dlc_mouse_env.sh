@@ -1,0 +1,15 @@
+# --- restore PYTHONNOUSERSITE ---
+if [ "${_OLD_PYTHONNOUSERSITE-__UNSET__}" = "__UNSET__" ]; then
+  unset PYTHONNOUSERSITE
+else
+  export PYTHONNOUSERSITE="${_OLD_PYTHONNOUSERSITE}"
+fi
+unset _OLD_PYTHONNOUSERSITE
+
+# --- restore LD_LIBRARY_PATH ---
+if [ "${_OLD_LD_LIBRARY_PATH-__UNSET__}" = "__UNSET__" ]; then
+  unset LD_LIBRARY_PATH
+else
+  export LD_LIBRARY_PATH="${_OLD_LD_LIBRARY_PATH}"
+fi
+unset _OLD_LD_LIBRARY_PATH

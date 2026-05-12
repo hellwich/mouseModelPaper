@@ -1,0 +1,134 @@
+20.03.26
+ 1945  python extract_only.py   --rgb_video /media/hellwich/Herakles/hellwich/hellwich/sdk3/mouseModel/mouse_sim/dlc_synth_project_seg3/videos/cam1_top.mp4   --mask_video /media/hellwich/Herakles/hellwich/hellwich/sdk3/mouseModel/mouse_sim/dlc_synth_project_seg3/videos/cam1_top_seg_id.mkv   --out_rgb_dir /media/hellwich/Herakles/hellwich/hellwich/sdk3/mouseModel/mouse_sim/dlc_synth_project_seg3/videos/frames/vid001_top_rgb   --out_mask_dir /media/hellwich/Herakles/hellwich/hellwich/sdk3/mouseModel/mouse_sim/dlc_synth_project_seg3/videos/frames/vid001_top_mask   --every 1
+ 1946  python extract_only.py   --rgb_video /media/hellwich/Herakles/hellwich/hellwich/sdk3/mouseModel/mouse_sim/dlc_synth_project_seg3/videos/cam2_front.mp4   --mask_video /media/hellwich/Herakles/hellwich/hellwich/sdk3/mouseModel/mouse_sim/dlc_synth_project_seg3/videos/cam2_front_seg_id.mkv   --out_rgb_dir /media/hellwich/Herakles/hellwich/hellwich/sdk3/mouseModel/mouse_sim/dlc_synth_project_seg3/videos/frames/vid002_front_rgb   --out_mask_dir /media/hellwich/Herakles/hellwich/hellwich/sdk3/mouseModel/mouse_sim/dlc_synth_project_seg3/videos/frames/vid002_front_mask   --every 1
+ 1947  python extract_only.py   --rgb_video /media/hellwich/Herakles/hellwich/hellwich/sdk3/mouseModel/mouse_sim/dlc_synth_project_seg3/videos/cam3_side.mp4   --mask_video /media/hellwich/Herakles/hellwich/hellwich/sdk3/mouseModel/mouse_sim/dlc_synth_project_seg3/videos/cam3_side_seg_id.mkv   --out_rgb_dir /media/hellwich/Herakles/hellwich/hellwich/sdk3/mouseModel/mouse_sim/dlc_synth_project_seg3/videos/frames/vid003_side_rgb   --out_mask_dir /media/hellwich/Herakles/hellwich/hellwich/sdk3/mouseModel/mouse_sim/dlc_synth_project_seg3/videos/frames/vid003_side_mask   --every 1
+ 
+ 21.3.26
+ (mouse_seg_clean) hellwich@Artemis:~/hellwich/sdk3/mouseModel/mouse_seg$ python mice_seg_v3.py train \
+  --manifest ./manifest.csv \
+  --out_dir ./runs/run_v3 \
+  --oversample_signals interaction,mouse0_rear,mouse1_rear \
+  --oversample_factor 4.0 \
+  --camera_crop \
+  --camera_crop_margin 1
+/media/hellwich/Herakles/hellwich/hellwich/sdk3/mouseModel/mouse_seg/mice_seg_v3.py:953: FutureWarning: `torch.cuda.amp.GradScaler(args...)` is deprecated. Please use `torch.amp.GradScaler('cuda', args...)` instead.
+  scaler = GradScaler(enabled=(cfg.amp and device.type == "cuda"))
+/media/hellwich/Herakles/hellwich/hellwich/sdk3/mouseModel/mouse_seg/mice_seg_v3.py:967: FutureWarning: `torch.cuda.amp.autocast(args...)` is deprecated. Please use `torch.amp.autocast('cuda', args...)` instead.
+  with autocast(enabled=(cfg.amp and device.type == "cuda")):
+/media/hellwich/Herakles/hellwich/hellwich/sdk3/mouseModel/mouse_seg/mice_seg_v3.py:998: FutureWarning: `torch.cuda.amp.autocast(args...)` is deprecated. Please use `torch.amp.autocast('cuda', args...)` instead.
+  with autocast(enabled=(cfg.amp and device.type == "cuda")):
+Epoch 001/40 train_loss=1.0630 train_mIoU=0.849 | val_loss=0.5596 val_mIoU=0.893 | top:0.000 | front:0.000 | side:0.893
+date
+Epoch 002/40 train_loss=0.2192 train_mIoU=0.930 | val_loss=0.1135 val_mIoU=0.926 | top:0.000 | front:0.000 | side:0.926
+Epoch 003/40 train_loss=0.0736 train_mIoU=0.944 | val_loss=0.0780 val_mIoU=0.935 | top:0.000 | front:0.000 | side:0.935
+Epoch 004/40 train_loss=0.0581 train_mIoU=0.947 | val_loss=0.0802 val_mIoU=0.926 | top:0.000 | front:0.000 | side:0.926
+Epoch 005/40 train_loss=0.0465 train_mIoU=0.955 | val_loss=0.1102 val_mIoU=0.896 | top:0.000 | front:0.000 | side:0.896
+Epoch 006/40 train_loss=0.0389 train_mIoU=0.962 | val_loss=0.1187 val_mIoU=0.885 | top:0.000 | front:0.000 | side:0.885
+Epoch 007/40 train_loss=0.0361 train_mIoU=0.964 | val_loss=0.1515 val_mIoU=0.860 | top:0.000 | front:0.000 | side:0.860
+Epoch 008/40 train_loss=0.0340 train_mIoU=0.965 | val_loss=0.1130 val_mIoU=0.895 | top:0.000 | front:0.000 | side:0.895
+Epoch 009/40 train_loss=0.0323 train_mIoU=0.967 | val_loss=0.1489 val_mIoU=0.862 | top:0.000 | front:0.000 | side:0.862
+Epoch 010/40 train_loss=0.0311 train_mIoU=0.968 | val_loss=0.1063 val_mIoU=0.903 | top:0.000 | front:0.000 | side:0.903
+Epoch 011/40 train_loss=0.0322 train_mIoU=0.967 | val_loss=0.0954 val_mIoU=0.911 | top:0.000 | front:0.000 | side:0.911
+Epoch 012/40 train_loss=0.0300 train_mIoU=0.969 | val_loss=0.1489 val_mIoU=0.864 | top:0.000 | front:0.000 | side:0.864
+Epoch 013/40 train_loss=0.0285 train_mIoU=0.970 | val_loss=0.1368 val_mIoU=0.876 | top:0.000 | front:0.000 | side:0.876
+Epoch 014/40 train_loss=0.0278 train_mIoU=0.971 | val_loss=0.2050 val_mIoU=0.823 | top:0.000 | front:0.000 | side:0.823
+Epoch 015/40 train_loss=0.0273 train_mIoU=0.971 | val_loss=0.1904 val_mIoU=0.833 | top:0.000 | front:0.000 | side:0.833
+Epoch 016/40 train_loss=0.0266 train_mIoU=0.972 | val_loss=0.1400 val_mIoU=0.873 | top:0.000 | front:0.000 | side:0.873
+Epoch 017/40 train_loss=0.0262 train_mIoU=0.972 | val_loss=0.1344 val_mIoU=0.877 | top:0.000 | front:0.000 | side:0.877
+Epoch 018/40 train_loss=0.0256 train_mIoU=0.973 | val_loss=0.1329 val_mIoU=0.880 | top:0.000 | front:0.000 | side:0.879
+Epoch 019/40 train_loss=0.0275 train_mIoU=0.971 | val_loss=0.1317 val_mIoU=0.883 | top:0.000 | front:0.000 | side:0.883
+Epoch 020/40 train_loss=0.0245 train_mIoU=0.974 | val_loss=0.3620 val_mIoU=0.734 | top:0.000 | front:0.000 | side:0.734
+Epoch 021/40 train_loss=0.0238 train_mIoU=0.975 | val_loss=0.2372 val_mIoU=0.804 | top:0.000 | front:0.000 | side:0.804
+Epoch 022/40 train_loss=0.0234 train_mIoU=0.975 | val_loss=0.1866 val_mIoU=0.839 | top:0.000 | front:0.000 | side:0.839
+Epoch 023/40 train_loss=0.0230 train_mIoU=0.976 | val_loss=0.2140 val_mIoU=0.818 | top:0.000 | front:0.000 | side:0.817
+Epoch 024/40 train_loss=0.0227 train_mIoU=0.976 | val_loss=0.2068 val_mIoU=0.824 | top:0.000 | front:0.000 | side:0.824
+Epoch 025/40 train_loss=0.0224 train_mIoU=0.976 | val_loss=0.1336 val_mIoU=0.880 | top:0.000 | front:0.000 | side:0.879
+Epoch 026/40 train_loss=0.0222 train_mIoU=0.976 | val_loss=0.2180 val_mIoU=0.815 | top:0.000 | front:0.000 | side:0.815
+Epoch 027/40 train_loss=0.0219 train_mIoU=0.977 | val_loss=0.2669 val_mIoU=0.785 | top:0.000 | front:0.000 | side:0.784
+Epoch 028/40 train_loss=0.0224 train_mIoU=0.976 | val_loss=0.1993 val_mIoU=0.827 | top:0.000 | front:0.000 | side:0.827
+Epoch 029/40 train_loss=0.0213 train_mIoU=0.977 | val_loss=0.1821 val_mIoU=0.841 | top:0.000 | front:0.000 | side:0.841
+Epoch 030/40 train_loss=0.0210 train_mIoU=0.978 | val_loss=0.2746 val_mIoU=0.780 | top:0.000 | front:0.000 | side:0.780
+Epoch 031/40 train_loss=0.0209 train_mIoU=0.978 | val_loss=0.2837 val_mIoU=0.774 | top:0.000 | front:0.000 | side:0.774
+Epoch 032/40 train_loss=0.0205 train_mIoU=0.978 | val_loss=0.1943 val_mIoU=0.832 | top:0.000 | front:0.000 | side:0.832
+Epoch 033/40 train_loss=0.0205 train_mIoU=0.978 | val_loss=0.2621 val_mIoU=0.787 | top:0.000 | front:0.000 | side:0.786
+Epoch 034/40 train_loss=0.0204 train_mIoU=0.978 | val_loss=0.1983 val_mIoU=0.829 | top:0.000 | front:0.000 | side:0.829
+Epoch 035/40 train_loss=0.0200 train_mIoU=0.979 | val_loss=0.2384 val_mIoU=0.801 | top:0.000 | front:0.000 | side:0.801
+Epoch 036/40 train_loss=0.0198 train_mIoU=0.979 | val_loss=0.2730 val_mIoU=0.781 | top:0.000 | front:0.000 | side:0.781
+Epoch 037/40 train_loss=0.0197 train_mIoU=0.979 | val_loss=0.2493 val_mIoU=0.793 | top:0.000 | front:0.000 | side:0.793
+Epoch 038/40 train_loss=0.0195 train_mIoU=0.979 | val_loss=0.2238 val_mIoU=0.813 | top:0.000 | front:0.000 | side:0.813
+Epoch 039/40 train_loss=0.0191 train_mIoU=0.980 | val_loss=0.2975 val_mIoU=0.767 | top:0.000 | front:0.000 | side:0.767
+Epoch 040/40 train_loss=0.0189 train_mIoU=0.980 | val_loss=0.2296 val_mIoU=0.807 | top:0.000 | front:0.000 | side:0.807
+
+
+(mouse_seg_clean) hellwich@Artemis:~/hellwich/sdk3/mouseModel/mouse_seg$ python mice_seg_v3.py extract --rgb_video /media/hellwich/Herakles/hellwich/hellwich/sdk3/mouseModel/mouse_sim/dlc_synth_project_seg4/videos/cam1_top.mp4   --mask_video /media/hellwich/Herakles/hellwich/hellwich/sdk3/mouseModel/mouse_sim/dlc_synth_project_seg4/videos/cam1_top_seg_id.mkv   --out_rgb_dir /media/hellwich/Herakles/hellwich/hellwich/sdk3/mouseModel/mouse_sim/dlc_synth_project_seg4/videos/frames/vid001_top_rgb   --out_mask_dir /media/hellwich/Herakles/hellwich/hellwich/sdk3/mouseModel/mouse_sim/dlc_synth_project_seg4/videos/frames/vid001_top_mask   --every 1
+Done extracting.
+(mouse_seg_clean) hellwich@Artemis:~/hellwich/sdk3/mouseModel/mouse_seg$ python mice_seg_v3.py extract --rgb_video /media/hellwich/Herakles/hellwich/hellwich/sdk3/mouseModel/mouse_sim/dlc_synth_project_seg4/videos/cam2_front.mp4   --mask_video /media/hellwich/Herakles/hellwich/hellwich/sdk3/mouseModel/mouse_sim/dlc_synth_project_seg4/videos/cam2_front_seg_id.mkv   --out_rgb_dir /media/hellwich/Herakles/hellwich/hellwich/sdk3/mouseModel/mouse_sim/dlc_synth_project_seg4/videos/frames/vid002_front_rgb   --out_mask_dir /media/hellwich/Herakles/hellwich/hellwich/sdk3/mouseModel/mouse_sim/dlc_synth_project_seg4/videos/frames/vid002_front_mask   --every 1
+Done extracting.
+(mouse_seg_clean) hellwich@Artemis:~/hellwich/sdk3/mouseModel/mouse_seg$ python mice_seg_v3.py extract --rgb_video /media/hellwich/Herakles/hellwich/hellwich/sdk3/mouseModel/mouse_sim/dlc_synth_project_seg4/videos/cam3_side.mp4   --mask_video /media/hellwich/Herakles/hellwich/hellwich/sdk3/mouseModel/mouse_sim/dlc_synth_project_seg4/videos/cam3_side_seg_id.mkv   --out_rgb_dir /media/hellwich/Herakles/hellwich/hellwich/sdk3/mouseModel/mouse_sim/dlc_synth_project_seg4/videos/frames/vid003_side_rgb   --out_mask_dir /media/hellwich/Herakles/hellwich/hellwich/sdk3/mouseModel/mouse_sim/dlc_synth_project_seg4/videos/frames/vid003_side_mask   --every 1
+Done extracting.
+(mouse_seg_clean) hellwich@Artemis:~/hellwich/sdk3/mouseModel/mouse_seg$ python mice_seg_v3.py extract --rgb_video /media/hellwich/Herakles/hellwich/hellwich/sdk3/mouseModel/mouse_sim/dlc_synth_project_seg5/videos/cam1_top.mp4   --mask_video /media/hellwich/Herakles/hellwich/hellwich/sdk3/mouseModel/mouse_sim/dlc_synth_project_seg5/videos/cam1_top_seg_id.mkv   --out_rgb_dir /media/hellwich/Herakles/hellwich/hellwich/sdk3/mouseModel/mouse_sim/dlc_synth_project_seg5/videos/frames/vid001_top_rgb   --out_mask_dir /media/hellwich/Herakles/hellwich/hellwich/sdk3/mouseModel/mouse_sim/dlc_synth_project_seg5/videos/frames/vid001_top_mask   --every 1
+Done extracting.
+(mouse_seg_clean) hellwich@Artemis:~/hellwich/sdk3/mouseModel/mouse_seg$ python mice_seg_v3.py extract --rgb_video /media/hellwich/Herakles/hellwich/hellwich/sdk3/mouseModel/mouse_sim/dlc_synth_project_seg5/videos/cam2_front.mp4   --mask_video /media/hellwich/Herakles/hellwich/hellwich/sdk3/mouseModel/mouse_sim/dlc_synth_project_seg5/videos/cam2_front_seg_id.mkv   --out_rgb_dir /media/hellwich/Herakles/hellwich/hellwich/sdk3/mouseModel/mouse_sim/dlc_synth_project_seg5/videos/frames/vid002_front_rgb   --out_mask_dir /media/hellwich/Herakles/hellwich/hellwich/sdk3/mouseModel/mouse_sim/dlc_synth_project_seg5/videos/frames/vid002_front_mask   --every 1
+Done extracting.
+(mouse_seg_clean) hellwich@Artemis:~/hellwich/sdk3/mouseModel/mouse_seg$ python mice_seg_v3.py extract --rgb_video /media/hellwich/Herakles/hellwich/hellwich/sdk3/mouseModel/mouse_sim/dlc_synth_project_seg5/videos/cam3_side.mp4   --mask_video /media/hellwich/Herakles/hellwich/hellwich/sdk3/mouseModel/mouse_sim/dlc_synth_project_seg5/videos/cam3_side_seg_id.mkv   --out_rgb_dir /media/hellwich/Herakles/hellwich/hellwich/sdk3/mouseModel/mouse_sim/dlc_synth_project_seg5/videos/frames/vid003_side_rgb   --out_mask_dir /media/hellwich/Herakles/hellwich/hellwich/sdk3/mouseModel/mouse_sim/dlc_synth_project_seg5/videos/frames/vid003_side_mask   --every 1
+Done extracting.
+
+(mouse_seg_clean) hellwich@Artemis:~/hellwich/sdk3/mouseModel/mouse_seg$ python mice_seg_v3.py train   --manifest ./manifest2.csv   --out_dir ./runs/run2   --oversample_signals interaction,mouse0_rear,mouse1_rear   --oversample_factor 4.0   --camera_crop   --camera_crop_margin 10 --resize_mode letterbox --val_split 0.3333333 --seed 7
+Epoch 001/40 train_loss=0.5318 train_mIoU=0.892 | val_loss=0.0635 val_mIoU=0.945 | top:0.950 | front:0.939 | side:0.946
+Epoch 002/40 train_loss=0.0574 train_mIoU=0.943 | val_loss=0.0445 val_mIoU=0.954 | top:0.957 | front:0.949 | side:0.955
+Epoch 003/40 train_loss=0.0447 train_mIoU=0.952 | val_loss=0.0345 val_mIoU=0.963 | top:0.965 | front:0.961 | side:0.964
+Epoch 004/40 train_loss=0.0353 train_mIoU=0.962 | val_loss=0.0320 val_mIoU=0.965 | top:0.967 | front:0.962 | side:0.967
+Epoch 005/40 train_loss=0.0317 train_mIoU=0.965 | val_loss=0.0294 val_mIoU=0.968 | top:0.968 | front:0.966 | side:0.969
+Epoch 006/40 train_loss=0.0298 train_mIoU=0.967 | val_loss=0.0287 val_mIoU=0.968 | top:0.968 | front:0.966 | side:0.970
+Epoch 007/40 train_loss=0.0282 train_mIoU=0.969 | val_loss=0.0273 val_mIoU=0.970 | top:0.969 | front:0.968 | side:0.972
+Epoch 008/40 train_loss=0.0267 train_mIoU=0.970 | val_loss=0.0259 val_mIoU=0.972 | top:0.971 | front:0.970 | side:0.974
+Epoch 009/40 train_loss=0.0264 train_mIoU=0.971 | val_loss=0.0250 val_mIoU=0.972 | top:0.973 | front:0.971 | side:0.974
+Epoch 010/40 train_loss=0.0249 train_mIoU=0.972 | val_loss=0.0245 val_mIoU=0.973 | top:0.973 | front:0.971 | side:0.974
+Epoch 011/40 train_loss=0.0244 train_mIoU=0.973 | val_loss=0.0240 val_mIoU=0.974 | top:0.974 | front:0.972 | side:0.975
+Epoch 012/40 train_loss=0.0238 train_mIoU=0.974 | val_loss=0.0237 val_mIoU=0.974 | top:0.974 | front:0.972 | side:0.976
+Epoch 013/40 train_loss=0.0233 train_mIoU=0.974 | val_loss=0.0234 val_mIoU=0.974 | top:0.975 | front:0.972 | side:0.975
+Epoch 014/40 train_loss=0.0232 train_mIoU=0.974 | val_loss=0.0229 val_mIoU=0.975 | top:0.975 | front:0.973 | side:0.976
+Epoch 015/40 train_loss=0.0224 train_mIoU=0.975 | val_loss=0.0228 val_mIoU=0.975 | top:0.975 | front:0.973 | side:0.976
+Epoch 016/40 train_loss=0.0220 train_mIoU=0.975 | val_loss=0.0222 val_mIoU=0.975 | top:0.975 | front:0.974 | side:0.977
+Epoch 017/40 train_loss=0.0217 train_mIoU=0.976 | val_loss=0.0222 val_mIoU=0.975 | top:0.975 | front:0.974 | side:0.977
+Epoch 018/40 train_loss=0.0214 train_mIoU=0.976 | val_loss=0.0221 val_mIoU=0.975 | top:0.976 | front:0.974 | side:0.977
+Epoch 019/40 train_loss=0.0210 train_mIoU=0.977 | val_loss=0.0219 val_mIoU=0.976 | top:0.976 | front:0.974 | side:0.977
+Epoch 020/40 train_loss=0.0207 train_mIoU=0.977 | val_loss=0.0216 val_mIoU=0.976 | top:0.976 | front:0.974 | side:0.978
+Epoch 021/40 train_loss=0.0206 train_mIoU=0.977 | val_loss=0.0216 val_mIoU=0.976 | top:0.976 | front:0.975 | side:0.977
+Epoch 022/40 train_loss=0.0202 train_mIoU=0.978 | val_loss=0.0214 val_mIoU=0.976 | top:0.976 | front:0.975 | side:0.978
+Epoch 023/40 train_loss=0.0199 train_mIoU=0.978 | val_loss=0.0213 val_mIoU=0.977 | top:0.977 | front:0.975 | side:0.978
+Epoch 024/40 train_loss=0.0198 train_mIoU=0.978 | val_loss=0.0213 val_mIoU=0.977 | top:0.977 | front:0.975 | side:0.978
+Epoch 025/40 train_loss=0.0194 train_mIoU=0.978 | val_loss=0.0210 val_mIoU=0.977 | top:0.977 | front:0.975 | side:0.978
+Epoch 026/40 train_loss=0.0193 train_mIoU=0.979 | val_loss=0.0209 val_mIoU=0.977 | top:0.977 | front:0.975 | side:0.978
+Epoch 027/40 train_loss=0.0191 train_mIoU=0.979 | val_loss=0.0209 val_mIoU=0.977 | top:0.977 | front:0.975 | side:0.978
+Epoch 028/40 train_loss=0.0189 train_mIoU=0.979 | val_loss=0.0207 val_mIoU=0.977 | top:0.977 | front:0.976 | side:0.979
+Epoch 029/40 train_loss=0.0186 train_mIoU=0.979 | val_loss=0.0207 val_mIoU=0.977 | top:0.977 | front:0.975 | side:0.979
+Epoch 030/40 train_loss=0.0183 train_mIoU=0.980 | val_loss=0.0206 val_mIoU=0.977 | top:0.977 | front:0.976 | side:0.979
+Epoch 031/40 train_loss=0.0183 train_mIoU=0.980 | val_loss=0.0205 val_mIoU=0.977 | top:0.977 | front:0.976 | side:0.979
+Epoch 032/40 train_loss=0.0180 train_mIoU=0.980 | val_loss=0.0205 val_mIoU=0.977 | top:0.977 | front:0.976 | side:0.979
+Epoch 033/40 train_loss=0.0178 train_mIoU=0.980 | val_loss=0.0203 val_mIoU=0.977 | top:0.977 | front:0.976 | side:0.979
+Epoch 034/40 train_loss=0.0176 train_mIoU=0.981 | val_loss=0.0203 val_mIoU=0.978 | top:0.977 | front:0.976 | side:0.979
+Epoch 035/40 train_loss=0.0173 train_mIoU=0.981 | val_loss=0.0203 val_mIoU=0.978 | top:0.977 | front:0.976 | side:0.979
+Epoch 036/40 train_loss=0.0173 train_mIoU=0.981 | val_loss=0.0201 val_mIoU=0.978 | top:0.977 | front:0.977 | side:0.979
+Epoch 037/40 train_loss=0.0171 train_mIoU=0.981 | val_loss=0.0202 val_mIoU=0.978 | top:0.977 | front:0.977 | side:0.979
+Epoch 038/40 train_loss=0.0168 train_mIoU=0.981 | val_loss=0.0201 val_mIoU=0.978 | top:0.977 | front:0.977 | side:0.979
+Epoch 039/40 train_loss=0.0167 train_mIoU=0.982 | val_loss=0.0200 val_mIoU=0.978 | top:0.977 | front:0.977 | side:0.979
+Epoch 040/40 train_loss=0.0166 train_mIoU=0.982 | val_loss=0.0200 val_mIoU=0.978 | top:0.977 | front:0.977 | side:0.979
+
+(mouse_seg_clean) hellwich@Artemis:~/hellwich/sdk3/mouseModel/mouse_seg$ python mice_seg_v3.py predict   --ckpt ./runs/run2/ckpt_best.pt   --rgb_source /home/hellwich/hellwich/sdk3/mouseModel/mouse_sim/out2m_2_render/cam1_top.mp4   --view top   --out_dir ./preds/out2m_2/top   --cameras_json /home/hellwich/hellwich/sdk3/mouseModel/mouse_sim/out2m_2/cameras.json   --camera_crop --camera_crop_margin 10   --resize_mode letterbox   --out_mask_video ./preds/out2m_2/cam1_top.mp4
+Done predicting.
+(mouse_seg_clean) hellwich@Artemis:~/hellwich/sdk3/mouseModel/mouse_seg$ python mice_seg_v3.py predict   --ckpt ./runs/run2/ckpt_best.pt   --rgb_source /home/hellwich/hellwich/sdk3/mouseModel/mouse_sim/out2m_2_render/cam2_front.mp4   --view front   --out_dir ./preds/out2m_2/front   --cameras_json /home/hellwich/hellwich/sdk3/mouseModel/mouse_sim/out2m_2/cameras.json   --camera_crop --camera_crop_margin 10   --resize_mode letterbox   --out_mask_video ./preds/out2m_2/cam2_front.mp4
+Done predicting.
+(mouse_seg_clean) hellwich@Artemis:~/hellwich/sdk3/mouseModel/mouse_seg$ python mice_seg_v3.py predict   --ckpt ./runs/run2/ckpt_best.pt   --rgb_source /home/hellwich/hellwich/sdk3/mouseModel/mouse_sim/out2m_2_render/cam3_side.mp4   --view side   --out_dir ./preds/out2m_2/side   --cameras_json /home/hellwich/hellwich/sdk3/mouseModel/mouse_sim/out2m_2/cameras.json   --camera_crop --camera_crop_margin 10   --resize_mode letterbox   --out_mask_video ./preds/out2m_2/cam3_side.mp4
+Done predicting.
+
+3.4.26
+(mouse_seg_clean) hellwich@Artemis:~/hellwich/sdk3/mouseModel/mouse_seg$ python mice_seg_v3_fullres.py  predict --ckpt ./runs/run2/ckpt_best.pt   --rgb_source /home/hellwich/hellwich/sdk3/mouseModel/mouse_sim/out2m_2_render/cam1_top.mp4   --view top   --out_dir ./preds/out2m_2/top   --cameras_json /home/hellwich/hellwich/sdk3/mouseModel/mouse_sim/out2m_2/cameras.json   --camera_crop --camera_crop_margin 10   --resize_mode letterbox --save_fullres_masks --out_mask_video ./preds/out2m_2/cam1_top.mp4
+Done predicting.
+(mouse_seg_clean) hellwich@Artemis:~/hellwich/sdk3/mouseModel/mouse_seg$ python mice_seg_v3_fullres.py  predict --ckpt ./runs/run2/ckpt_best.pt   --rgb_source /home/hellwich/hellwich/sdk3/mouseModel/mouse_sim/out2m_2_render/cam2_front.mp4   --view top   --out_dir ./preds/out2m_2/front   --cameras_json /home/hellwich/hellwich/sdk3/mouseModel/mouse_sim/out2m_2/cameras.json   --camera_crop --camera_crop_margin 10   --resize_mode letterbox --save_fullres_masks --out_mask_video ./preds/out2m_2/cam2_front.mp4
+Done predicting.
+(mouse_seg_clean) hellwich@Artemis:~/hellwich/sdk3/mouseModel/mouse_seg$ python mice_seg_v3_fullres.py  predict --ckpt ./runs/run2/ckpt_best.pt   --rgb_source /home/hellwich/hellwich/sdk3/mouseModel/mouse_sim/out2m_2_render/cam3_side.mp4   --view top   --out_dir ./preds/out2m_2/side   --cameras_json /home/hellwich/hellwich/sdk3/mouseModel/mouse_sim/out2m_2/cameras.json   --camera_crop --camera_crop_margin 10   --resize_mode letterbox --save_fullres_masks --out_mask_video ./preds/out2m_2/cam3_side.mp4
+Done predicting.
+
+#attention: conda env is mouse_seg_clean and not mouse_seg
+

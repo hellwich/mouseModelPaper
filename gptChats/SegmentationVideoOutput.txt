@@ -1,0 +1,112 @@
+Title: Segmentation Video Output
+ID: 69bd5c2c-85b4-8389-9aba-15c50456e625
+
+User: The uploaded python program renders video of a simulated mouse using a mouse.obj file with texture. When a pixels color is rendered it is known whether the pixel is background, mouse 0 or mouse 2. Please add an option for outputting another series of videos with ground truth segment labels. Background should be black, mouse 0 and 1 to follow these command line arguments pp.add_argument("--mouse0-bgr", type=parse_bgr, default=parse_bgr("25,35,40"), help='Mouse0 color as B,G,R (default "25,35,40").') pp.add_argument("--mouse1-bgr", type=parse_bgr, default=parse_bgr("40,35,25"), help='Mouse1 color as B,G,R (default "40,35,25").')
+
+Assistant: I added an optional “ground-truth segmentation video” export to your renderer (based on the uploaded script fileciteturn0file0).
+
+### Download the updated script
+[mouse_deform_render_multi_swaprb_dlc_checkvid_visfix_with_seg.py](sandbox:/mnt/data/mouse_deform_render_multi_swaprb_dlc_checkvid_visfix_with_seg.py)
+
+### What it does
+When enabled, it writes an additional MP4 per camera where each pixel is a flat label color:
+
+- **Background**: `0,0,0` (black)
+- **Mouse 0**: `--mouse0-bgr` (default `25,35,40`)
+- **Mouse 1**: `--mouse1-bgr` (default `40,35,25`)
+- If you render other mouse IDs, they get a deterministic vivid fallback color (so they’re still distinguishable).
+
+Labeling respects **occlusion between mice** by rendering a depth pass per mouse and choosing the closest mouse per pixel.  
+In **physical mode** (mouse inside cage), it also respects **occlusion by the cage** by comparing against a pre-rendered cage-only depth map.
+
+### New CLI options
+- `--seg-video`  
+  Enable segmentation video output.
+- `--seg-suffix` (default: `_seg`)  
+  Output filenames become: `CAMNAME{seg_suffix}.mp4`
+- `--seg-cage-front-tol` (default: `1e-4`)  
+  Physical mode only: how much closer than the cage depth a pixel must be to count as “mouse”.
+- `--mouse0-bgr` (default: `25,35,40`)  
+- `--mouse1-bgr` (default: `40,35,25`)
+
+### Output location / naming
+Segmentation videos are written alongside the normal videos:
+- If `--dlc-project` is on: into the DLC `videos/` folder
+- Otherwise: into `--out-dir`
+
+Example names:
+- `cam0.mp4` (normal render)
+- `cam0_seg.mp4` (segmentation render)
+
+### Example command
+```bash
+python mouse_deform_render_multi_swaprb_dlc_checkvid_visfix_with_seg.py \
+  --mesh mouse.obj --mesh-nodes mouse_mesh_nodes.txt --coords-3d coords_3d.csv \
+  --cameras cameras.json --out-dir out_render --fps 10 \
+  --seg-video --seg-suffix _seg \
+  --mouse0-bgr 25,35,40 --mouse1-bgr 40,35,25
+```
+
+If you want the segmentation to be **single-channel label IDs** (0/1/2) instead of color-coded BGR, tell me your preferred encoding/container (e.g., grayscale MP4 vs. PNG sequence), and I’ll adapt it.
+
+User: Yes, please add an option to get single-channel label IDs. Is there a format that allows labels 0, 1,2, while still running properly as a video with contrast?
+
+Assistant: Here’s an updated version of the script that can also write **single-channel label-ID ground truth**.
+
+[Download the updated script](sandbox:/mnt/data/mouse_deform_render_multi_swaprb_dlc_checkvid_visfix_with_seg_color_and_labelid.py)
+
+## What you get
+
+### 1) Exact label IDs (single-channel)
+Enable with:
+- `--seg-id-video`
+
+Output:
+- One **grayscale** video per camera
+- **Background = 0**
+- Mice get **stable IDs starting at 1** (sorted by mouse-id), so typically:
+  - mouse 0 → **1**
+  - mouse 1 → **2**
+
+**Default format is lossless**:
+- container: `.mkv` (`--seg-id-ext mkv`)
+- codec: `FFV1` (`--seg-id-fourcc FFV1`)
+
+This is important because **MP4/H.264/H.265 are usually lossy** and will often corrupt exact pixel values (bad for ground truth).
+
+### 2) A view-friendly grayscale preview (high contrast)
+Enable with:
+- `--seg-id-vis-video`
+
+This writes an extra per-camera grayscale MP4 where values are remapped to **0..255** (e.g. 0→0, 1→~128, 2→255), so it looks “normal” in any player.
+
+**Not suitable as training ground truth** (values are remapped + MP4 is lossy), but great for quick visual inspection.
+
+### 3) Your existing color segmentation
+Still available via:
+- `--seg-video` (background black, mouse colors from `--mouse0-bgr` / `--mouse1-bgr`)
+
+## Answer to your “0/1/2 with contrast” question
+You can store **exact 0/1/2** in a real video file (that’s what the **FFV1 `.mkv`** does), but **most video players won’t auto-rescale** a 0..2 intensity range—so it will look almost black unless you adjust levels.
+
+Practical options:
+- Use **`--seg-id-video`** for exact labels (training)
+- Use **`--seg-id-vis-video`** or **`--seg-video`** for human-viewable contrast (inspection)
+
+If you want to view the exact-ID `.mkv` with contrast *without changing stored values*, you can apply a display LUT in a player like ffplay, e.g.:
+```bash
+ffplay cam0_seg_id.mkv -vf "lut=y='val*127'"
+```
+(That multiplies display intensity; the stored pixel values remain 0/1/2.)
+
+## Example command
+```bash
+python mouse_deform_render_multi_swaprb_dlc_checkvid_visfix_with_seg_color_and_labelid.py \
+  --mesh mouse.obj --mesh-nodes mouse_mesh_nodes.txt --coords-3d coords_3d.csv \
+  --cameras cameras.json --out-dir out_render --fps 10 \
+  --seg-video --mouse0-bgr 25,35,40 --mouse1-bgr 40,35,25 \
+  --seg-id-video --seg-id-ext mkv --seg-id-fourcc FFV1 \
+  --seg-id-vis-video
+```
+
+If you want the label-ID video to use **mouse-id directly** (e.g., background=0, mouse0=0, mouse1=1, mouse2=2) instead of the current “sorted → 1..N” mapping, tell me your desired mapping rule and I’ll adjust it.

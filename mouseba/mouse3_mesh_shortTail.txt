@@ -1,0 +1,23 @@
+[NODES]
+head   26 0 28
+nose_tip  39.2 -0.0188604 17.801
+left_ear_tip  22.5 12.0522 33.4264
+right_ear_tip  22.5 -11.2977 33.8973
+tail_root  -25 -0.0174853 15.6073
+tail_tip  -43 0.0019435 9.50848
+left_front_paw  20 9.32948 0.273997
+right_front_paw  20 -9.31234 0.266986
+left_hind_paw  -5 7.97234 0.0791141
+right_hind_paw -5 -7.95659 0.0675963
+
+[EDGES]
+head nose_tip
+head left_ear_tip
+head right_ear_tip
+head left_front_paw
+head right_front_paw
+head tail_root
+tail_root left_hind_paw
+tail_root right_hind_paw
+tail_root tail_tip
+

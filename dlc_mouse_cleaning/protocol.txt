@@ -1,0 +1,32 @@
+2.4.26
+python run_mouse3d.py   --cameras ../../mouse_sim/out2m_2/cameras.json   --dlc ../../mouse_sim/out2m_2_render/dlc_long.csv   --seg-dir ../../mouse_seg/preds/out2m_2   --out ../dlc_cleaned/out2m_2/tuneA   --frames 0 1 --trace-ceres --verbose-ceres --debug_stageA --debug > stageA.out3
+
+python run_mouse3d.py   --cameras ../../mouse_sim/out2m_2/cameras.json   --dlc ../../mouse_sim/out2m_2_render/dlc_long.csv   --seg-dir ../../mouse_seg/preds/out2m_2   --out ../dlc_cleaned/out2m_2/tuneB --debug
+
+(mouseba) hellwich@Artemis:~/hellwich/sdk3/mouseModel/dlc_mouse_cleaning/python$ python visualize_dlc_vs_reprojected3d_v2.py   --dlc ../../mouse_sim/out2m_2_render/dlc_long.csv   --triangulated3d ../dlc_cleaned/out2m_2/tuneB_triangulated3d.csv   --cameras ../../mouse_sim/out2m_2/cameras.json   --template ../../mouse_sim/mouse3_mesh_shortTail.txt   --topIn ../../mouse_sim/out2m_2_render/cam1_top.mp4 --frontIn ../../mouse_sim/out2m_2_render/cam2_front.mp4 --sideIn ../../mouse_sim/out2m_2_render/cam3_side.mp4   --topOut top_overlay.mp4 --frontOut front_overlay.mp4 --sideOut side_overlay.mp4   --joinedVideo joined_overlay.mp4   --mouse0-bgr 0,255,0 --mouse1-bgr 0,0,255
+[INFO] DLC individual -> canonical mouse mapping (best-effort):
+  mouse0 -> mouse0
+  mouse1 -> mouse1
+Wrote:
+  top_overlay.mp4
+  front_overlay.mp4
+  side_overlay.mp4
+  joined_overlay.mp4
+  
+  
+3.4.26
+  
+  2026-04-02 21:41:52 python run_mouse3d.py   --cameras ../../mouse_sim/out2m_2/cameras.json   --dlc ../../mouse_sim/out2m_2_render/dlc_long.csv   --seg-dir ../../mouse_seg/preds/out2m_2   --out ../dlc_cleaned/out2m_2/tuneB --debug
+  
+  2026-04-03 12:27:45 python visualize_dlc_vs_reprojected3d_v4.py   --dlc ../../mouse_sim/out2m_2_render/dlc_long.csv   --triangulated3d ../dlc_cleaned/out2m_2/tuneB_triangulated3d.csv   --cameras ../../mouse_sim/out2m_2/cameras.json   --template ../../mouse_sim/mouse3_mesh_shortTail.txt   --topIn ../../mouse_sim/out2m_2_render/cam1_top.mp4 --frontIn ../../mouse_sim/out2m_2_render/cam2_front.mp4 --sideIn ../../mouse_sim/out2m_2_render/cam3_side.mp4   --topOut top_overlay.mp4 --frontOut front_overlay.mp4 --sideOut side_overlay.mp4   --joinedVideo joined_overlay.mp4   --mouse0-bgr 0,255,0 --mouse1-bgr 0,0,255
+  
+  
+  977  2026-04-03 23:09:00 python run_mouse3d.py   --cameras ../../mouse_sim/out2m_2/cameras.json   --dlc ../../mouse_sim/out2m_2_render/dlc_long.csv   --seg-dir ../../mouse_seg/preds/out2m_2   --out ../dlc_cleaned/out2m_2/tuneB --graph_model ../../mouse_sim/mouse3_mesh_shortTail.txt --graph-rigid-tol-mm-max 5 --debug --frames 195 205 --debug-stageA --debug-stageB
+  978  2026-04-03 23:09:05 python run_mouse3d.py   --cameras ../../mouse_sim/out2m_2/cameras.json   --dlc ../../mouse_sim/out2m_2_render/dlc_long.csv   --seg-dir ../../mouse_seg/preds/out2m_2   --out ../dlc_cleaned/out2m_2/tuneB --graph_model ../../mouse_sim/mouse3_mesh_shortTail.txt --graph-rigid-tol-mm-max 5 --debug --frames 195 205 --debug-stageA --debug-stageB >cleaningdebug.out 
+
+
+4.4.26
+ 1021  2026-04-04 14:42:14 python run_mouse3d.py   --cameras ../../mouse_sim/out2m_2/cameras.json   --dlc ../../mouse_sim/out2m_2_render/dlc_long.csv   --seg-dir ../../mouse_seg/preds/out2m_2   --out ../dlc_cleaned/out2m_2/tuneB --graph_model ../../mouse_sim/mouse3_mesh_shortTail.txt --graph-rigid-tol-mm-max 5 --debug --frames 195 205 --debug-stageA --debug-stageB >cleaningdebug.out 
+ 1022  2026-04-04 14:47:46 python run_mouse3d.py   --cameras ../../mouse_sim/out2m_2/cameras.json   --dlc ../../mouse_sim/out2m_2_render/dlc_long.csv   --seg-dir ../../mouse_seg/preds/out2m_2   --out ../dlc_cleaned/out2m_2/tuneB --graph_model ../../mouse_sim/mouse3_mesh_shortTail.txt --graph-rigid-tol-mm-max 5 --debug
+ 1023  2026-04-04 14:48:32 history | grep visual
+ 1024  2026-04-04 14:49:09 python visualize_dlc_vs_reprojected3d_v4.py   --dlc ../../mouse_sim/out2m_2_render/dlc_long.csv   --triangulated3d ../dlc_cleaned/out2m_2/tuneB_triangulated3d.csv   --cameras ../../mouse_sim/out2m_2/cameras.json   --template ../../mouse_sim/mouse3_mesh_shortTail.txt   --topIn ../../mouse_sim/out2m_2_render/cam1_top.mp4 --frontIn ../../mouse_sim/out2m_2_render/cam2_front.mp4 --sideIn ../../mouse_sim/out2m_2_render/cam3_side.mp4   --topOut top_overlay.mp4 --frontOut front_overlay.mp4 --sideOut side_overlay.mp4   --joinedVideo joined_overlay.mp4   --mouse0-bgr 0,255,0 --mouse1-bgr 0,0,255 --overlay cleaned  

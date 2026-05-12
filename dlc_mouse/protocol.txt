@@ -1,0 +1,47 @@
+ 2058  python - <<'PY'
+from importlib.metadata import version
+import torch, tensorflow as tf, deeplabcut
+print("typing_extensions:", version("typing_extensions"))
+print("torch:", torch.__version__)
+print("tensorflow:", tf.__version__)
+print("deeplabcut:", deeplabcut.__version__)
+PY
+
+ 2059  python train_dlc_multi_mouse_engine.py   --config /media/hellwich/Herakles/hellwich/hellwich/sdk3/mouseModel/mouse_sim/dlc_synth_project/config.yaml
+
+2.3.26; not done yet:
+python mouse_sim2.py --mouse-graph mouse3_mesh_shortTail.txt --write-video --duration 180 --fps 10 --seed 25 --out-dir out2m_2 --export-cameras
+python mouse_deform_render_multi_swaprb.py --mesh ../free3DMouserigged3Dmodel/mouse.obj --mesh-nodes mouse_mesh_nodes.txt --coords-3d out2m_2/coords_3d.csv --cameras out2m_2/cameras.json --out-dir out2m_2_render --mouse-on-top --swap-rb-mouse-id 1 --fps 10 --kernel thin_plate_spline --N Polar_Bears_2004-11-15.jpg --S A_view_on_Sams_sand_dunes.jpeg --W Beach_at_Fort_Lauderdale.jpg --E Mt._Everest_from_Gokyo_Ri_November_5,_2012.jpg --T Sky_with_puffy_clouds.JPG --B 1000_F_1851230750_Hs5HaJxALwRZZnT6q2Gdjx286LAWVsm0.jpg
+conda activate dlc_mouse
+python predict_dlc_multi_mouse_batch.py \
+  --config /media/hellwich/Herakles/hellwich/hellwich/sdk3/mouseModel/mouse_sim/dlc_synth_project/config.yaml \
+  --videos-dir /media/hellwich/Herakles/hellwich/hellwich/sdk3/mouseModel/mouse_sim/out2m_2_render \
+  --destfolder /media/hellwich/Herakles/hellwich/hellwich/sdk3/mouseModel/mouse_sim/out2m_2_render/dlc_predictions \
+  --n-tracks 2 \
+  --animal-names mouse0,mouse1 \
+  --create-labeled-video
+
+
+6.3.26
+test data generation
+ 1966  python mouse_sim2.py --mouse-graph mouse3_mesh_shortTail.txt --write-video --duration 180 --fps 10 --seed 25 --out-dir out2m_2 --export-cameras
+ 1967  python mouse_deform_render_multi_swaprb.py --mesh ../free3DMouserigged3Dmodel/mouse.obj --mesh-nodes mouse_mesh_nodes.txt --coords-3d out2m_2/coords_3d.csv --cameras out2m_2/cameras.json --out-dir out2m_2_render --mouse-on-top --swap-rb-mouse-id 1 --fps 10 --kernel thin_plate_spline --N Polar_Bears_2004-11-15.jpg --S A_view_on_Sams_sand_dunes.jpeg --W Beach_at_Fort_Lauderdale.jpg --E Mt._Everest_from_Gokyo_Ri_November_5,_2012.jpg --T Sky_with_puffy_clouds.JPG --B 1000_F_1851230750_Hs5HaJxALwRZZnT6q2Gdjx286LAWVsm0.jpg
+ 1968  conda deactivate
+ 1969  cd ..
+ 1970  cd dlc_mouse/
+ 1971  conda activate dlc_mouse
+
+prediction with trained dlc model
+ 1974  python predict_dlc_multi_mouse_batch_v3.py   --config /media/hellwich/Herakles/hellwich/hellwich/sdk3/mouseModel/mouse_sim/dlc_synth_project/config.yaml   --videos-dir /media/hellwich/Herakles/hellwich/hellwich/sdk3/mouseModel/mouse_sim/out2m_2_render   --destfolder /media/hellwich/Herakles/hellwich/hellwich/sdk3/mouseModel/mouse_sim/out2m_2_render/dlc_predictions   --n-tracks 2   --batchsize 8   --create-labeled-video
+ 
+formatting for later bundle adjustment
+ 1977  python dlc_read_multicam_cli.py   --input cam1_top:/media/hellwich/Herakles/hellwich/hellwich/sdk3/mouseModel/mouse_sim/out2m_2_render/dlc_predictions/cam1_top*el.h5   --input cam2_front:/media/hellwich/Herakles/hellwich/hellwich/sdk3/mouseModel/mouse_sim/out2m_2_render/dlc_predictions/cam2_front*el.h5   --input cam3_side:/media/hellwich/Herakles/hellwich/hellwich/sdk3/mouseModel/mouse_sim/out2m_2_render/dlc_predictions/cam3_side*el.h5   --out-long /tmp/dlc_long.csv
+
+ 1979  python dlc_read_multicam_cli.py   --input cam1_top:/media/hellwich/Herakles/hellwich/hellwich/sdk3/mouseModel/mouse_sim/out2m_2_render/dlc_predictions/cam1_top*el.h5   --input cam2_front:/media/hellwich/Herakles/hellwich/hellwich/sdk3/mouseModel/mouse_sim/out2m_2_render/dlc_predictions/cam2_front*el.h5   --input cam3_side:/media/hellwich/Herakles/hellwich/hellwich/sdk3/mouseModel/mouse_sim/out2m_2_render/dlc_predictions/cam3_side*el.h5   --out-long /media/hellwich/Herakles/hellwich/hellwich/sdk3/mouseModel/mouse_sim/out2m_2_render/dlc_long.csv --out-npz /media/hellwich/Herakles/hellwich/hellwich/sdk3/mouseModel/mouse_sim/out2m_2_render/dlc_array.npz
+ 
+ 09.03.26
+ remark: check this against the dlc videos
+ 
+ 
+ 09.04.26
+ 2026-04-09 22:49:36 python dlc_read_multicam_cli_flex.py   --input cam1_top:/media/hellwich/Herakles/hellwich/hellwich/sdk3/mouseModel/LockBoxModel/labeled/2021-06-18_07-28-45_segment1_mouse291_combined_top-down-view.h5   --input cam2_front:/media/hellwich/Herakles/hellwich/hellwich/sdk3/mouseModel/LockBoxModel/labeled/2021-06-18_07-28-45_segment1_mouse291_combined_front-view.h5   --input cam3_side:/media/hellwich/Herakles/hellwich/hellwich/sdk3/mouseModel/LockBoxModel/labeled/2021-06-18_07-28-45_segment1_mouse291_combined_side-view.h5   --default-individual mouse291   --out-long /media/hellwich/Herakles/hellwich/hellwich/sdk3/mouseModel/LockBoxModel/mouse3D/2021-06-18_07-28-45_segment1_mouse291_combined_dlc_long.csv   --out-npz /media/hellwich/Herakles/hellwich/hellwich/sdk3/mouseModel/LockBoxModel/mouse3D/2021-06-18_07-28-45_segment1_mouse291_combined_dlc_array.npz

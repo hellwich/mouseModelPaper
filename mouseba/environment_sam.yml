@@ -1,0 +1,53 @@
+name: mouseba
+channels:
+  - conda-forge
+  # PyTorch + torchvision are generally easiest to resolve from the official channel.
+  # If you prefer conda-forge-only, you can remove this and try resolving with conda-forge builds.
+  - pytorch
+  - defaults
+
+dependencies:
+  # Python runtime
+  - python=3.11
+  - numpy
+  - pandas
+
+  # Build toolchain
+  - cmake
+  - ninja
+  - pkg-config
+  - pybind11
+  - pip
+  - git
+
+  # C++ toolchain (keeps everything inside conda; no apt needed)
+  - c-compiler
+  - cxx-compiler
+
+  # Optimization + linear algebra
+  - eigen
+  - ceres-solver
+
+  # Video / rendering
+  - opencv
+  - imageio
+  - imageio-ffmpeg
+  - ffmpeg
+
+  # Plotting / debugging
+  - matplotlib
+
+  # --- Segment Anything (SAM) prerequisites ---
+  # Torch is needed because SAM uses PyTorch.
+  - pytorch
+  - torchvision
+
+  # Common utilities used by SAM and/or helpful for image handling
+  - pillow
+  - pyyaml
+  - tqdm
+  - scikit-image
+
+  # Segment Anything itself is installed via pip from the official GitHub repository.
+  - pip:
+      - "git+https://github.com/facebookresearch/segment-anything.git"

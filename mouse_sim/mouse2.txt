@@ -1,0 +1,23 @@
+[NODES]
+head 16. 0. 27.
+nose_tip 36. 0. 10.5
+left_ear_tip 16. 7.75 27.
+right_ear_tip 16. -7.75 27.
+left_front_paw 20. 5.5 0.
+right_front_paw 20. -5.5 0.
+tail_root -8.5 0. 27.
+left_hind_paw -8.5 13.5 0.
+right_hind_paw -8.5 -13.5 0.
+tail_tip -30. 0. 2.
+
+[EDGES]
+head nose_tip
+head left_ear_tip
+head right_ear_tip
+head left_front_paw
+head right_front_paw
+head tail_root
+tail_root left_hind_paw
+tail_root right_hind_paw
+tail_root tail_tip
+

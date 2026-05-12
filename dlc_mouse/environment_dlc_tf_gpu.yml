@@ -1,0 +1,20 @@
+name: dlc_mouse
+channels:
+  - conda-forge
+dependencies:
+  - python=3.10
+  - pip
+  - cudatoolkit=11.8
+  - pip:
+      - deeplabcut==2.3.11
+      - tensorflow==2.12.1
+      - tensorpack
+      - tf_slim
+      - nvidia-cudnn-cu11==8.6.0.163
+      # Optional but usually already pulled:
+      # - pandas
+      # - tables
+      # - opencv-python
+variables:
+  PYTHONNOUSERSITE: "1"
+

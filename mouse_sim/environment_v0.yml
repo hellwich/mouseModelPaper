@@ -1,0 +1,45 @@
+name: mouse_sim
+channels:
+  - pytorch
+  - nvidia
+  - conda-forge
+dependencies:
+  - python=3.11
+  - pip
+
+  # Core numerics
+  - numpy
+  - scipy
+  - pillow
+  - tqdm
+
+  # Mouse 1 (videos)
+  - opencv
+  - imageio
+  - imageio-ffmpeg
+
+  # Mesh IO + rendering (Mouse 2.0 renderer)
+  - trimesh
+  - pyrender
+  - pyglet
+  - pyopengl
+  
+  # If you want to run as a module / lint later (optional)
+  # - ipython
+  # - black
+  # - ruff
+
+  # Classical baseline
+  - scikit-learn
+
+  # Deep learning (GPU)
+  - pytorch
+  - torchvision
+  - torchaudio
+  - pytorch-cuda=12.1
+
+  # xLSTM (installed via pip)
+  - pip:
+      - xlstm
+
+

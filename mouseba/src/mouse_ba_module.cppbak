@@ -1,0 +1,411 @@
+#include <pybind11/pybind11.h>
+#include <pybind11/numpy.h>
+#include <pybind11/stl.h>
+
+#include <ceres/ceres.h>
+#include <ceres/loss_function.h>
+
+#include <Eigen/Core>
+
+#include <unordered_map>
+#include <vector>
+#include <memory>
+#include <stdexcept>
+
+#include "costs.h"
+
+namespace py = pybind11;
+
+namespace mouse_ba {
+
+struct WeightPack {
+  // DLC gating / weighting
+  double likelihood_min = 0.05;
+  double sigma_pix_min = 1.5;
+  double sigma_pix_max = 8.0;
+
+  // Robust loss
+  std::string robust_loss = "huber"; // huber | cauchy | none
+  double robust_param_px = 3.0;
+
+  // Joint weights (multiplier)
+  std::unordered_map<int, double> joint_weight;
+
+  // Slack priors/smoothness (mm)
+  std::unordered_map<int, double> sigma_delta_mm;
+  std::unordered_map<int, double> sigma_deltadot_mm_per_frame;
+
+  // Spline priors
+  int knot_interval_frames = 3;
+  double sigma_spline_p_mm = 4.0;
+  double sigma_spline_R_rad = 0.0872664626; // 5 deg
+};
+
+static double sigma_pix_from_likelihood(double l, double smin, double smax) {
+  if (l < 0.0) l = 0.0;
+  if (l > 1.0) l = 1.0;
+  const double a = (1.0 - l);
+  const double s = smin + (a*a) * (smax - smin);
+  return s;
+}
+
+static WeightPack weight_pack_from_py(const py::dict& d,
+                                     int num_joints) {
+  WeightPack wp;
+  if (d.contains("likelihood_min")) wp.likelihood_min = py::float_(d["likelihood_min"]);
+  if (d.contains("sigma_pix_min")) wp.sigma_pix_min = py::float_(d["sigma_pix_min"]);
+  if (d.contains("sigma_pix_max")) wp.sigma_pix_max = py::float_(d["sigma_pix_max"]);
+  if (d.contains("robust_loss")) wp.robust_loss = py::str(d["robust_loss"]);
+  if (d.contains("robust_param_px")) wp.robust_param_px = py::float_(d["robust_param_px"]);
+  if (d.contains("knot_interval_frames")) wp.knot_interval_frames = py::int_(d["knot_interval_frames"]);
+  if (d.contains("sigma_spline_p_mm")) wp.sigma_spline_p_mm = py::float_(d["sigma_spline_p_mm"]);
+  if (d.contains("sigma_spline_R_rad")) wp.sigma_spline_R_rad = py::float_(d["sigma_spline_R_rad"]);
+
+  // joint_weight: list or dict
+  wp.joint_weight.clear();
+  if (d.contains("joint_weight")) {
+    py::object jw = d["joint_weight"];
+    if (py::isinstance<py::dict>(jw)) {
+      auto jwd = jw.cast<py::dict>();
+      for (auto item : jwd) {
+        // item.first/item.second are py::handle; use py::cast for robust conversion
+        int j = py::cast<int>(item.first);
+        double w = py::cast<double>(item.second);
+        wp.joint_weight[j] = w;
+      }
+    } else {
+      // assume list-like length num_joints
+      auto arr = jw.cast<std::vector<double>>();
+      if ((int)arr.size() != num_joints) {
+        throw std::runtime_error("joint_weight list must have length num_joints");
+      }
+      for (int j = 0; j < num_joints; ++j) wp.joint_weight[j] = arr[j];
+    }
+  }
+
+  // Slack sigma maps
+  auto read_map = [&](const char* key, std::unordered_map<int,double>& out) {
+    out.clear();
+    if (!d.contains(key)) return;
+    auto dd = py::dict(d[key]);
+    for (auto item : dd) {
+      int j = py::cast<int>(item.first);
+      double v = py::cast<double>(item.second);
+      out[j] = v;
+    }
+  };
+  read_map("sigma_delta_mm", wp.sigma_delta_mm);
+  read_map("sigma_deltadot_mm_per_frame", wp.sigma_deltadot_mm_per_frame);
+
+  // Provide defaults if missing
+  for (int j = 0; j < num_joints; ++j) {
+    if (!wp.joint_weight.count(j)) wp.joint_weight[j] = 0.3;
+  }
+  return wp;
+}
+
+static std::unique_ptr<ceres::LossFunction> make_loss(const WeightPack& wp) {
+  if (wp.robust_loss == "none") return nullptr;
+  if (wp.robust_loss == "huber") return std::make_unique<ceres::HuberLoss>(wp.robust_param_px);
+  if (wp.robust_loss == "cauchy") return std::make_unique<ceres::CauchyLoss>(wp.robust_param_px);
+  throw std::runtime_error("Unknown robust_loss: " + wp.robust_loss);
+}
+
+// Main solver
+py::dict solve(
+    py::array_t<double, py::array::c_style | py::array::forcecast> cam_quat, // (C,4)
+    py::array_t<double, py::array::c_style | py::array::forcecast> cam_trans, // (C,3)
+    py::array_t<double, py::array::c_style | py::array::forcecast> cam_intr, // (C,4)
+    py::array_t<double, py::array::c_style | py::array::forcecast> template_pts, // (J,3)
+    py::array_t<int, py::array::c_style | py::array::forcecast> obs_cam,
+    py::array_t<int, py::array::c_style | py::array::forcecast> obs_mouse,
+    py::array_t<int, py::array::c_style | py::array::forcecast> obs_joint,
+    py::array_t<int, py::array::c_style | py::array::forcecast> obs_frame,
+    py::array_t<double, py::array::c_style | py::array::forcecast> obs_x,
+    py::array_t<double, py::array::c_style | py::array::forcecast> obs_y,
+    py::array_t<double, py::array::c_style | py::array::forcecast> obs_likelihood,
+    int num_frames,
+    py::array_t<double, py::array::c_style | py::array::forcecast> init_mouse_quat, // (M,T,4)
+    py::array_t<double, py::array::c_style | py::array::forcecast> init_mouse_trans, // (M,T,3)
+    py::dict weight_pack,
+    py::dict solver_options) {
+
+  const auto C = cam_quat.shape(0);
+  const auto J = template_pts.shape(0);
+  const auto M = init_mouse_quat.shape(0);
+  const int T = num_frames;
+
+  if (cam_quat.ndim() != 2 || cam_quat.shape(1) != 4) throw std::runtime_error("cam_quat must be (C,4)");
+  if (cam_trans.ndim() != 2 || cam_trans.shape(1) != 3) throw std::runtime_error("cam_trans must be (C,3)");
+  if (cam_intr.ndim() != 2 || cam_intr.shape(1) != 4) throw std::runtime_error("cam_intr must be (C,4)");
+  if (template_pts.ndim() != 2 || template_pts.shape(1) != 3) throw std::runtime_error("template_pts must be (J,3)");
+  if (init_mouse_quat.ndim() != 3 || init_mouse_quat.shape(1) != T || init_mouse_quat.shape(2) != 4)
+    throw std::runtime_error("init_mouse_quat must be (M,T,4)");
+  if (init_mouse_trans.ndim() != 3 || init_mouse_trans.shape(1) != T || init_mouse_trans.shape(2) != 3)
+    throw std::runtime_error("init_mouse_trans must be (M,T,3)");
+
+  auto wp = weight_pack_from_py(weight_pack, (int)J);
+
+  // Copy camera params into mutable storage (we can set constant later).
+  std::vector<double> cam_q(C*4), cam_t(C*3), cam_K(C*4);
+  std::memcpy(cam_q.data(), cam_quat.data(), sizeof(double)*C*4);
+  std::memcpy(cam_t.data(), cam_trans.data(), sizeof(double)*C*3);
+  std::memcpy(cam_K.data(), cam_intr.data(), sizeof(double)*C*4);
+
+  // Mouse pose storage
+  std::vector<double> mouse_q(M*T*4), mouse_t(M*T*3);
+  std::memcpy(mouse_q.data(), init_mouse_quat.data(), sizeof(double)*M*T*4);
+  std::memcpy(mouse_t.data(), init_mouse_trans.data(), sizeof(double)*M*T*3);
+
+  // Slack offsets: allocate for all joints, but we will set constants for core joints.
+  std::vector<double> slack(M*T*J*3, 0.0);
+
+  // Spline control points count
+  const int h = std::max(1, wp.knot_interval_frames);
+  const int num_segments = (T - 1) / h + 1;
+  const int K = num_segments + 3;
+
+  std::vector<double> ctrl_p(M*K*3, 0.0);
+  std::vector<double> ctrl_phi(M*K*3, 0.0);
+
+  // Initialize translation control points by sampling the current translations.
+  for (int m = 0; m < (int)M; ++m) {
+    for (int k = 0; k < K; ++k) {
+      int t_src = std::min(T-1, std::max(0, (k-1)*h));
+      const double* pt = &mouse_t[(m*T + t_src)*3];
+      double* cp = &ctrl_p[(m*K + k)*3];
+      cp[0] = pt[0]; cp[1] = pt[1]; cp[2] = pt[2];
+      // ctrl_phi init stays 0 (identity) unless you later seed it.
+    }
+  }
+
+  ceres::Problem problem;
+
+  // Manifolds for quaternions
+  std::vector<std::unique_ptr<ceres::Manifold>> manifolds;
+#if CERES_VERSION_MAJOR >= 2
+  auto make_quat_manifold = [&]() {
+    manifolds.emplace_back(std::make_unique<ceres::EigenQuaternionManifold>());
+    return manifolds.back().get();
+  };
+#else
+  auto make_quat_manifold = [&]() {
+    manifolds.emplace_back(std::make_unique<ceres::QuaternionParameterization>());
+    return manifolds.back().get();
+  };
+#endif
+
+  // Add camera parameter blocks (optionally constant)
+  for (int c = 0; c < (int)C; ++c) {
+    double* q = &cam_q[c*4];
+    double* t = &cam_t[c*3];
+    double* Kp = &cam_K[c*4];
+    problem.AddParameterBlock(q, 4, make_quat_manifold());
+    problem.AddParameterBlock(t, 3);
+    problem.AddParameterBlock(Kp, 4);
+  }
+
+  // Solver option toggles
+  const bool optimize_cameras = solver_options.contains("optimize_cameras") ? (bool)py::bool_(solver_options["optimize_cameras"]) : false;
+  const bool optimize_intrinsics = solver_options.contains("optimize_intrinsics") ? (bool)py::bool_(solver_options["optimize_intrinsics"]) : false;
+
+  if (!optimize_cameras) {
+    for (int c = 0; c < (int)C; ++c) {
+      problem.SetParameterBlockConstant(&cam_q[c*4]);
+      problem.SetParameterBlockConstant(&cam_t[c*3]);
+    }
+  }
+  if (!optimize_intrinsics) {
+    for (int c = 0; c < (int)C; ++c) {
+      problem.SetParameterBlockConstant(&cam_K[c*4]);
+    }
+  }
+
+  // Add mouse pose blocks
+  for (int m = 0; m < (int)M; ++m) {
+    for (int t = 0; t < T; ++t) {
+      double* q = &mouse_q[(m*T + t)*4];
+      double* tr = &mouse_t[(m*T + t)*3];
+      problem.AddParameterBlock(q, 4, make_quat_manifold());
+      problem.AddParameterBlock(tr, 3);
+    }
+  }
+
+  // Add slack blocks + priors
+  // Define core joints: 0=head, 4=tail_root (based on template file ordering)
+  const std::unordered_map<std::string,int> name_to_idx = {
+      {"head",0}, {"nose_tip",1}, {"left_ear_tip",2}, {"right_ear_tip",3},
+      {"tail_root",4}, {"tail_tip",5}, {"left_front_paw",6}, {"right_front_paw",7},
+      {"left_hind_paw",8}, {"right_hind_paw",9}
+  };
+  const int j_head = 0;
+  const int j_tailroot = 4;
+
+  for (int m = 0; m < (int)M; ++m) {
+    for (int t = 0; t < T; ++t) {
+      for (int j = 0; j < (int)J; ++j) {
+        double* dlt = &slack[((m*T + t)*J + j)*3];
+        problem.AddParameterBlock(dlt, 3);
+
+        if (j == j_head || j == j_tailroot) {
+          // core joints: no slack
+          dlt[0]=dlt[1]=dlt[2]=0.0;
+          problem.SetParameterBlockConstant(dlt);
+          continue;
+        }
+
+        // Prior (tiny slack)
+        double sigma = 3.0; // default
+        auto it = wp.sigma_delta_mm.find(j);
+        if (it != wp.sigma_delta_mm.end()) sigma = it->second;
+        const double inv_sigma = 1.0 / sigma;
+        problem.AddResidualBlock(SlackPriorCost::Create(inv_sigma), nullptr, dlt);
+
+        // Smoothness with next frame
+        if (t + 1 < T) {
+          double sigma_dt = 1.2;
+          auto it2 = wp.sigma_deltadot_mm_per_frame.find(j);
+          if (it2 != wp.sigma_deltadot_mm_per_frame.end()) sigma_dt = it2->second;
+          const double inv_sigma_dt = 1.0 / sigma_dt;
+          double* dnext = &slack[((m*T + (t+1))*J + j)*3];
+          problem.AddResidualBlock(SlackSmoothCost::Create(inv_sigma_dt), nullptr, dlt, dnext);
+        }
+      }
+    }
+  }
+
+  // Add spline control points and spline priors
+  const double inv_sig_p = 1.0 / wp.sigma_spline_p_mm;
+  const double inv_sig_R = 1.0 / wp.sigma_spline_R_rad;
+
+  for (int m = 0; m < (int)M; ++m) {
+    // Control points are variable blocks
+    for (int k = 0; k < K; ++k) {
+      problem.AddParameterBlock(&ctrl_p[(m*K + k)*3], 3);
+      problem.AddParameterBlock(&ctrl_phi[(m*K + k)*3], 3);
+    }
+
+    for (int t = 0; t < T; ++t) {
+      const int base = t / h;
+      const int k0 = base;
+      // ensure indices in range (should be by construction)
+      double* P0 = &ctrl_p[(m*K + (k0+0))*3];
+      double* P1 = &ctrl_p[(m*K + (k0+1))*3];
+      double* P2 = &ctrl_p[(m*K + (k0+2))*3];
+      double* P3 = &ctrl_p[(m*K + (k0+3))*3];
+      double* tr = &mouse_t[(m*T + t)*3];
+      problem.AddResidualBlock(TranslationSplinePriorCost::Create(t, h, inv_sig_p), nullptr, P0, P1, P2, P3, tr);
+
+      double* Phi0 = &ctrl_phi[(m*K + (k0+0))*3];
+      double* Phi1 = &ctrl_phi[(m*K + (k0+1))*3];
+      double* Phi2 = &ctrl_phi[(m*K + (k0+2))*3];
+      double* Phi3 = &ctrl_phi[(m*K + (k0+3))*3];
+      double* q = &mouse_q[(m*T + t)*4];
+      problem.AddResidualBlock(RotationSplinePriorCost::Create(t, h, inv_sig_R), nullptr, Phi0, Phi1, Phi2, Phi3, q);
+    }
+  }
+
+  // Residuals for observations
+  const auto N = obs_cam.size();
+  if (obs_cam.size() != obs_mouse.size() || obs_cam.size() != obs_joint.size() ||
+      obs_cam.size() != obs_frame.size() || obs_cam.size() != obs_x.size() ||
+      obs_cam.size() != obs_y.size() || obs_cam.size() != obs_likelihood.size()) {
+    throw std::runtime_error("Observation arrays must have same length");
+  }
+
+  std::vector<Eigen::Vector3d> B(J);
+  {
+    auto ptr = template_pts.unchecked<2>();
+    for (int j = 0; j < (int)J; ++j) {
+      B[j] = Eigen::Vector3d(ptr(j,0), ptr(j,1), ptr(j,2));
+    }
+  }
+
+  auto loss = make_loss(wp);
+
+  auto cam_idx = obs_cam.unchecked<1>();
+  auto mouse_idx = obs_mouse.unchecked<1>();
+  auto joint_idx = obs_joint.unchecked<1>();
+  auto frame_idx = obs_frame.unchecked<1>();
+  auto xobs = obs_x.unchecked<1>();
+  auto yobs = obs_y.unchecked<1>();
+  auto lik = obs_likelihood.unchecked<1>();
+
+  for (ssize_t i = 0; i < N; ++i) {
+    const int c = cam_idx(i);
+    const int m = mouse_idx(i);
+    const int j = joint_idx(i);
+    const int t = frame_idx(i);
+    const double l = lik(i);
+
+    if (c < 0 || c >= (int)C || m < 0 || m >= (int)M || j < 0 || j >= (int)J || t < 0 || t >= T) continue;
+    if (!(std::isfinite(xobs(i)) && std::isfinite(yobs(i)))) continue;
+    if (l < wp.likelihood_min) continue;
+
+    const double sigma_pix = sigma_pix_from_likelihood(l, wp.sigma_pix_min, wp.sigma_pix_max);
+    const double w_joint = wp.joint_weight.at(j);
+    const double sqrt_w = std::sqrt(w_joint) / sigma_pix;
+
+    double* cq = &cam_q[c*4];
+    double* ct = &cam_t[c*3];
+    double* cK = &cam_K[c*4];
+    double* mq = &mouse_q[(m*T + t)*4];
+    double* mt = &mouse_t[(m*T + t)*3];
+    double* dlt = &slack[((m*T + t)*J + j)*3];
+
+    ceres::CostFunction* cf = ReprojectionCost::Create(xobs(i), yobs(i), B[j], sqrt_w);
+    problem.AddResidualBlock(cf, loss.get(), cq, ct, cK, mq, mt, dlt);
+  }
+
+  // Solve
+  ceres::Solver::Options opts;
+  opts.max_num_iterations = solver_options.contains("max_num_iterations") ? (int)py::int_(solver_options["max_num_iterations"]) : 50;
+  opts.num_threads = solver_options.contains("num_threads") ? (int)py::int_(solver_options["num_threads"]) : 8;
+  opts.linear_solver_type = ceres::SPARSE_NORMAL_CHOLESKY;
+  opts.minimizer_progress_to_stdout = solver_options.contains("verbose") ? (bool)py::bool_(solver_options["verbose"]) : false;
+
+  ceres::Solver::Summary summary;
+  ceres::Solve(opts, &problem, &summary);
+
+  // Output
+  py::dict out;
+  out["summary"] = summary.BriefReport();
+
+  // Return mouse poses
+  auto out_q = py::array_t<double>({(ssize_t)M, (ssize_t)T, (ssize_t)4});
+  auto out_t = py::array_t<double>({(ssize_t)M, (ssize_t)T, (ssize_t)3});
+  std::memcpy(out_q.mutable_data(), mouse_q.data(), sizeof(double)*M*T*4);
+  std::memcpy(out_t.mutable_data(), mouse_t.data(), sizeof(double)*M*T*3);
+  out["mouse_quat"] = out_q;
+  out["mouse_trans"] = out_t;
+
+  auto out_sl = py::array_t<double>({(ssize_t)M, (ssize_t)T, (ssize_t)J, (ssize_t)3});
+  std::memcpy(out_sl.mutable_data(), slack.data(), sizeof(double)*M*T*J*3);
+  out["slack"] = out_sl;
+
+  // Return spline control points for debugging
+  auto out_cp = py::array_t<double>({(ssize_t)M, (ssize_t)K, (ssize_t)3});
+  auto out_cphi = py::array_t<double>({(ssize_t)M, (ssize_t)K, (ssize_t)3});
+  std::memcpy(out_cp.mutable_data(), ctrl_p.data(), sizeof(double)*M*K*3);
+  std::memcpy(out_cphi.mutable_data(), ctrl_phi.data(), sizeof(double)*M*K*3);
+  out["ctrl_p"] = out_cp;
+  out["ctrl_phi"] = out_cphi;
+  out["knot_interval_frames"] = h;
+
+  return out;
+}
+
+} // namespace mouse_ba
+
+PYBIND11_MODULE(mouse_ba, m) {
+  m.doc() = "Mouse model-based bundle adjustment with soft spline priors (Ceres backend).";
+
+  m.def("solve", &mouse_ba::solve,
+        py::arg("cam_quat"), py::arg("cam_trans"), py::arg("cam_intr"),
+        py::arg("template_pts"),
+        py::arg("obs_cam"), py::arg("obs_mouse"), py::arg("obs_joint"), py::arg("obs_frame"),
+        py::arg("obs_x"), py::arg("obs_y"), py::arg("obs_likelihood"),
+        py::arg("num_frames"),
+        py::arg("init_mouse_quat"), py::arg("init_mouse_trans"),
+        py::arg("weight_pack"), py::arg("solver_options"));
+}

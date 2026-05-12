@@ -1,0 +1,369 @@
+6.2.26
+python mouse_sim.py --mouse-graph mouse.txt --write-video --duration 60 --fps 10 --seed 2 --out-dir out
+ 1979  python mouse_sim.py --mouse-graph mouse2.txt --write-video --duration 60 --fps 10 --seed 2 --out-dir out2
+ 1980  python mouse_sim.py --mouse-graph mouse2.txt --write-video --duration 5 --fps 10 --seed 2 --out-dir out_straight   --omega-max 0 --omega-noise 0 --omega-damp 0 --wall-repulse-gain 0   --speed-noise 0 --speed-damp 0
+ 1981  python mouse_sim.py --mouse-graph mouse2.txt --write-video --duration 5 --fps 10 --seed 2 --out-dir out_straight   --omega-max 0 --omega-noise 0 --omega-damp 0 --wall-repulse-gain 0   --speed-noise 0 --speed-damp 0 --max-speed 10
+ 1982  python mouse_sim.py --mouse-graph mouse2.txt --write-video --duration 5 --fps 10 --seed 2 --out-dir out_straight   --omega-max 0 --omega-noise 0 --omega-damp 0 --wall-repulse-gain 0   --speed-noise 0 --speed-damp 0 --max-speed 10 --stride-scale 2
+ 1983  python mouse_sim.py --mouse-graph mouse2.txt --write-video --duration 5 --fps 10 --seed 2 --out-dir out_straight   --omega-max 0 --omega-noise 0 --omega-damp 0 --wall-repulse-gain 0   --speed-noise 0 --speed-damp 0 --max-speed 10 --stride_scale 2
+ 
+python mouse_sim.py --mouse-graph mouse2.txt --write-video --duration 60 --fps 10 --seed 2 --out-dir out3 --export-cameras
+
+
+10.2.26
+
+python mouse_sim.py --mouse-graph mouse3_mesh.txt  --write-video --duration 60 --fps 10 --seed 2 --out-dir out3mesh --export-cameras
+
+ 
+python mouse_deform_render.py   --mesh ../free3DMouserigged3Dmodel/mouse.obj   --mesh-nodes mouse_mesh_nodes.txt   --coords-3d out3mesh/coords_3d.csv   --cameras out3mesh/cameras.json   --out-dir out3mesh_render   --fps 10   --kernel thin_plate_spline
+
+python mouse_deform_render.py   --mesh ../free3DMouserigged3Dmodel/mouse.obj   --mesh-nodes mouse_mesh_nodes.txt   --coords-3d out3mesh/coords_3d.csv   --cameras out3mesh/cameras.json   --out-dir out3mesh_render   --fps 10   --kernel thin_plate_spline --N Polar_Bears_2004-11-15.jpg --S A_view_on_Sams_sand_dunes.jpeg --W Beach_at_Fort_Lauderdale.jpg --E Mt._Everest_from_Gokyo_Ri_November_5,_2012.jpg --T Sky_with_puffy_clouds.JPG --B 1000_F_1851230750_Hs5HaJxALwRZZnT6q2Gdjx286LAWVsm0.jpg --mouse-on-top
+
+
+12.2.26
+1995  python mouse_sim2.py   --mouse-graph mouse3_mesh.txt   --write-video   --duration 180 --fps 10 --seed 2   --out-dir out2m --export-cameras
+ 1996  python mouse_sim2.py   --mouse-graph mouse3_mesh_shortTail.txt   --write-video   --duration 180 --fps 10 --seed 2   --out-dir out2m --export-cameras
+ 
+ 
+ python mouse_deform_render_multi_swaprb.py   --mesh ../free3DMouserigged3Dmodel/mouse.obj   --mesh-nodes mouse_mesh_nodes.txt   --coords-3d out2m/coords_3d.csv --cameras out2m/cameras.json --out-dir out2m_render --mouse-on-top --swap-rb-mouse-id 1 --fps 10 --kernel thin_plate_spline
+ 
+ python mouse_deform_render_multi_swaprb.py   --mesh ../free3DMouserigged3Dmodel/mouse.obj   --mesh-nodes mouse_mesh_nodes.txt   --coords-3d out2m/coords_3d.csv --cameras out2m/cameras.json --out-dir out2m_render --mouse-on-top --swap-rb-mouse-id 1 --fps 10 --kernel thin_plate_spline --N Polar_Bears_2004-11-15.jpg --S A_view_on_Sams_sand_dunes.jpeg --W Beach_at_Fort_Lauderdale.jpg --E Mt._Everest_from_Gokyo_Ri_November_5,_2012.jpg --T Sky_with_puffy_clouds.JPG --B 1000_F_1851230750_Hs5HaJxALwRZZnT6q2Gdjx286LAWVsm0.jpg
+ 
+ 
+ 1997  python mouse_sim2.py   --mouse-graph mouse.txt --out-dir out_pair   --duration 600 --fps 10 --seed 2   --social-rate-per-min 8 --social-cooldown 1.0   --avoid-gain 0.5 --proxy-scale 0.75 --collision-margin 3.0
+ 1998  python train_behavior_pair.py   --coords-3d out_pair/coords_3d.csv   --model lstm   --out-dir out_pair_train   --amp --tf32
+
+ 1948  python predict_behavior_pair.py   --ckpt out_pair_train/behavior_pair_lstm.pt   --coords-3d out_pair/coords_3d.csv   --out-dir out_pair_pred   --no-labels
+
+ 1956  python train_behavior_pair_xlstm_enabled.py   --coords-3d out_pair/coords_3d.csv   --model lstm   --out-dir out_pair_train2 --amp --tf32
+ 1957  python train_behavior_pair_xlstm_enabled.py   --coords-3d out_pair/coords_3d.csv   --model transformer   --out-dir out_pair_train2 --amp --tf32
+ 1958  python train_behavior_pair_xlstm_enabled.py   --coords-3d out_pair/coords_3d.csv   --model baseline_rule   --out-dir out_pair_train2 --amp --tf32
+ 1959  python train_behavior_pair_xlstm_enabled.py   --coords-3d out_pair/coords_3d.csv   --model baseline_logreg   --out-dir out_pair_train2 --amp --tf32
+ 1960  python train_behavior_pair_xlstm_enabled.py   --coords-3d out_pair/coords_3d.csv   --model xlstm   --out-dir out_pair_train2 --amp --tf32
+ 
+ 23.2.2026
+ for DLC; not run yet:
+python mouse_deform_render_multi_swaprb_dlc.py \
+  --coords-3d out_pair/coords_3d.csv \
+  --cameras cameras.json \
+  --mesh mouse.obj \
+  --mesh-nodes mouse_mesh_nodes.txt \
+  --out-dir dlc_synth_project \
+  --mouse-on-top \
+  --dlc-project \
+  --dlc-every 5 \
+  --dlc-scorer synthetic
+  
+  1978  python mouse_deform_render_multi_swaprb_dlc_checkvid_visfix.py   --coords-3d out2m/coords_3d.csv   --cameras out2m/cameras.json   --mesh ../free3DMouserigged3Dmodel/mouse.obj   --mesh-nodes mouse_mesh_nodes.txt   --out-dir dlc_synth_project   --mouse-on-top   --dlc-project   --dlc-every 5   --dlc-scorer synthetic --dlc-overwrite --dlc-check-video --dlc-occ-front-tol 10 --dlc-vis-patch 2 --N Polar_Bears_2004-11-15.jpg --S A_view_on_Sams_sand_dunes.jpeg --W Beach_at_Fort_Lauderdale.jpg --E Mt._Everest_from_Gokyo_Ri_November_5,_2012.jpg --T Sky_with_puffy_clouds.JPG --B 1000_F_1851230750_Hs5HaJxALwRZZnT6q2Gdjx286LAWVsm0.jpg 
+  
+  
+6.3.26
+test data generation
+ 1966  python mouse_sim2.py --mouse-graph mouse3_mesh_shortTail.txt --write-video --duration 180 --fps 10 --seed 25 --out-dir out2m_2 --export-cameras
+ 1967  python mouse_deform_render_multi_swaprb.py --mesh ../free3DMouserigged3Dmodel/mouse.obj --mesh-nodes mouse_mesh_nodes.txt --coords-3d out2m_2/coords_3d.csv --cameras out2m_2/cameras.json --out-dir out2m_2_render --mouse-on-top --swap-rb-mouse-id 1 --fps 10 --kernel thin_plate_spline --N Polar_Bears_2004-11-15.jpg --S A_view_on_Sams_sand_dunes.jpeg --W Beach_at_Fort_Lauderdale.jpg --E Mt._Everest_from_Gokyo_Ri_November_5,_2012.jpg --T Sky_with_puffy_clouds.JPG --B 1000_F_1851230750_Hs5HaJxALwRZZnT6q2Gdjx286LAWVsm0.jpg
+ 
+ 
+20.3.26
+python mouse_sim2.py --mouse-graph mouse3_mesh_shortTail.txt --write-video --duration 180 --fps 10 --seed 2 --out-dir out2m_3 --export-cameras
+ 
+python mouse_deform_render_multi_swaprb_dlc_checkvid_visfix_with_seg_color_and_labelid.py   --coords-3d out2m_3/coords_3d.csv   --cameras out2m_3/cameras.json   --mesh ../free3DMouserigged3Dmodel/mouse.obj   --mesh-nodes mouse_mesh_nodes.txt   --out-dir dlc_synth_project_seg3 --mouse-on-top   --dlc-project   --dlc-every 5   --dlc-scorer synthetic --dlc-overwrite --dlc-check-video --dlc-occ-front-tol 10 --dlc-vis-patch 2 --seg-video --seg-id-video --seg-id-ext mkv --seg-id-fourcc FFV1   --seg-id-vis-video --N Polar_Bears_2004-11-15.jpg --S A_view_on_Sams_sand_dunes.jpeg --W Beach_at_Fort_Lauderdale.jpg --E Mt._Everest_from_Gokyo_Ri_November_5,_2012.jpg --T Sky_with_puffy_clouds.JPG --B 1000_F_1851230750_Hs5HaJxALwRZZnT6q2Gdjx286LAWVsm0.jpg
+
+21.3.26
+ 1973  python mouse_sim2.py --mouse-graph mouse3_mesh_shortTail.txt --write-video --duration 180 --fps 10 --seed 35 --out-dir out2m_4 --export-cameras
+ 1974  python mouse_sim2.py --mouse-graph mouse3_mesh_shortTail.txt --write-video --duration 180 --fps 10 --seed 45 --out-dir out2m_5 --export-cameras
+ 1975  python mouse_deform_render_multi_swaprb_dlc_checkvid_visfix_with_seg_color_and_labelid.py   --coords-3d out2m_4/coords_3d.csv   --cameras out2m_4/cameras.json   --mesh ../free3DMouserigged3Dmodel/mouse.obj   --mesh-nodes mouse_mesh_nodes.txt   --out-dir dlc_synth_project_seg4 --mouse-on-top   --dlc-project   --dlc-every 5   --dlc-scorer synthetic --dlc-overwrite --dlc-check-video --dlc-occ-front-tol 10 --dlc-vis-patch 2 --seg-video --seg-id-video --seg-id-ext mkv --seg-id-fourcc FFV1   --seg-id-vis-video --N Polar_Bears_2004-11-15.jpg --S A_view_on_Sams_sand_dunes.jpeg --W Beach_at_Fort_Lauderdale.jpg --E Mt._Everest_from_Gokyo_Ri_November_5,_2012.jpg --T Sky_with_puffy_clouds.JPG --B 1000_F_1851230750_Hs5HaJxALwRZZnT6q2Gdjx286LAWVsm0.jpg
+ 1976  python mouse_deform_render_multi_swaprb_dlc_checkvid_visfix_with_seg_color_and_labelid.py   --coords-3d out2m_5/coords_3d.csv   --cameras out2m_5/cameras.json   --mesh ../free3DMouserigged3Dmodel/mouse.obj   --mesh-nodes mouse_mesh_nodes.txt   --out-dir dlc_synth_project_seg5 --mouse-on-top   --dlc-project   --dlc-every 5   --dlc-scorer synthetic --dlc-overwrite --dlc-check-video --dlc-occ-front-tol 10 --dlc-vis-patch 2 --seg-video --seg-id-video --seg-id-ext mkv --seg-id-fourcc FFV1   --seg-id-vis-video --N Polar_Bears_2004-11-15.jpg --S A_view_on_Sams_sand_dunes.jpeg --W Beach_at_Fort_Lauderdale.jpg --E Mt._Everest_from_Gokyo_Ri_November_5,_2012.jpg --T Sky_with_puffy_clouds.JPG --B 1000_F_1851230750_Hs5HaJxALwRZZnT6q2Gdjx286LAWVsm0.jpg
+
+22.3.26
+#out2m_2 is the test data
+
+4.4.26
+ 1024  2026-04-04 21:41:42 conda deactivate
+ 1025  2026-04-04 21:41:47 conda remove -n mouse_sim_fix --all -y
+ 1026  2026-04-04 21:41:56 conda create -n mouse_sim_fix python=3.11 pip -y
+ 1027  2026-04-04 21:42:18 conda activate mouse_sim_fix
+ 1028  2026-04-04 21:42:28 conda install -y   pytorch==2.2.2 torchvision==0.17.2 torchaudio==2.2.2 pytorch-cuda=12.1   -c pytorch -c nvidia --strict-channel-priority
+ 1029  2026-04-04 22:02:21 python -c "import torch; print(torch.__version__); print(torch.version.cuda); print(torch.cuda.is_available())"
+ 1030  2026-04-04 22:04:43 conda install -y "numpy<2" -c conda-forge --override-channels
+ 1031  2026-04-04 22:05:04 python -c "import numpy, torch; print('numpy', numpy.__version__); print('torch', torch.__version__); print('cuda', torch.version.cuda); print('gpu', torch.cuda.is_available())"
+ 1032  2026-04-04 22:05:27 conda install -y scipy pillow tqdm scikit-learn imageio imageio-ffmpeg -c conda-forge --override-channels
+ 1033  2026-04-04 22:05:44 pip install xlstm
+ 1034  2026-04-04 22:06:14 history
+ 1035  2026-04-04 22:06:42 python predict_behavior_pair_xlstm.py   --ckpt out_pair_train2/behavior_pair_lstm.pt   --coords-3d out_pair/coords_3d.csv   --out-dir out_pair_pred2   --no-labels
+
+(mouse_sim_fix) hellwich@Artemis:~/hellwich/sdk3/mouseModel/mouse_sim$ python predict_behavior_pair_xlstm.py   --ckpt out_pair_train2/behavior_pair_lstm.pt   --coords-3d out_pair/coords_3d.csv   --out-dir out_pair_pred2   --no-labels
+device: cuda
+gpu: NVIDIA GeForce RTX 4090 Laptop GPU
+wrote: out_pair_pred2/ethogram_pred_out_pair.csv
+Ethograms written to: out_pair_pred2
+
+ 1045  2026-04-04 22:23:04 python predict_behavior_pair_xlstm.py   --ckpt out_pair_train2/behavior_pair_lstm.pt   --coords-3d out_pair/coords_3d.csv   --out-dir out_pair_pred_with_report   --report
+ 1046  2026-04-04 22:23:14 python predict_behavior_pair_xlstm.py   --ckpt out_pair_train2/behavior_pair_lstm.pt   --coords-3d out2m_2/coords_3d.csv   --out-dir out2m_2_pred   --report
+
+#prediction on training data
+(mouse_sim_fix) hellwich@Artemis:~/hellwich/sdk3/mouseModel/mouse_sim$ python predict_behavior_pair_xlstm.py   --ckpt out_pair_train2/behavior_pair_lstm.pt   --coords-3d out_pair/coords_3d.csv   --out-dir out_pair_pred_with_report   --report
+device: cuda
+gpu: NVIDIA GeForce RTX 4090 Laptop GPU
+wrote: out_pair_pred_with_report/ethogram_pred_out_pair.csv
+
+== out_pair ==
+Interaction f1: 0.9815
+              precision    recall  f1-score   support
+
+           0     0.9813    0.9342    0.9572      1855
+           1     0.9712    0.9920    0.9815      4145
+
+    accuracy                         0.9742      6000
+   macro avg     0.9762    0.9631    0.9693      6000
+weighted avg     0.9743    0.9742    0.9740      6000
+
+Rear0 f1 (non-interaction): 0.9613
+              precision    recall  f1-score   support
+
+           0     0.9960    1.0000    0.9980      1761
+           1     1.0000    0.9255    0.9613        94
+
+    accuracy                         0.9962      1855
+   macro avg     0.9980    0.9628    0.9797      1855
+weighted avg     0.9962    0.9962    0.9962      1855
+
+Rear1 f1 (non-interaction): 0.9311
+              precision    recall  f1-score   support
+
+           0     0.9941    0.9935    0.9938      1703
+           1     0.9281    0.9342    0.9311       152
+
+    accuracy                         0.9887      1855
+   macro avg     0.9611    0.9639    0.9625      1855
+weighted avg     0.9887    0.9887    0.9887      1855
+
+Ethograms written to: out_pair_pred_with_report
+
+
+#prediction on test data (direct 3D simulation output; not on 3D reconstruction from image-based DLC body part extraction)
+(mouse_sim_fix) hellwich@Artemis:~/hellwich/sdk3/mouseModel/mouse_sim$ python predict_behavior_pair_xlstm.py   --ckpt out_pair_train2/behavior_pair_lstm.pt   --coords-3d out2m_2/coords_3d.csv   --out-dir out2m_2_pred   --report
+device: cuda
+gpu: NVIDIA GeForce RTX 4090 Laptop GPU
+wrote: out2m_2_pred/ethogram_pred_out2m_2.csv
+
+== out2m_2 ==
+Interaction f1: 0.6276
+              precision    recall  f1-score   support
+
+           0     0.9814    0.7085    0.8230      1417
+           1     0.4685    0.9504    0.6276       383
+
+    accuracy                         0.7600      1800
+   macro avg     0.7249    0.8295    0.7253      1800
+weighted avg     0.8723    0.7600    0.7814      1800
+
+Rear0 f1 (non-interaction): 0.8369
+              precision    recall  f1-score   support
+
+           0     0.9831    1.0000    0.9915      1335
+           1     1.0000    0.7195    0.8369        82
+
+    accuracy                         0.9838      1417
+   macro avg     0.9915    0.8598    0.9142      1417
+weighted avg     0.9840    0.9838    0.9825      1417
+
+Rear1 f1 (non-interaction): 0.8316
+              precision    recall  f1-score   support
+
+           0     0.9820    0.9939    0.9879      1314
+           1     0.9080    0.7670    0.8316       103
+
+    accuracy                         0.9774      1417
+   macro avg     0.9450    0.8805    0.9097      1417
+weighted avg     0.9766    0.9774    0.9765      1417
+
+Ethograms written to: out2m_2_pred
+
+
+
+
+
+6.4.2026
+ 1017  2026-04-06 15:57:11 python triangulated3d_to_coords3d.py   --triangulated-3d ../dlc_mouse_cleaning/dlc_cleaned/out2m_2/tuneB_triangulated3d.csv   --mouse-graph mouse3_mesh_shortTail.txt   --out-csv converted_coords_3d.csv   --fps 10   --ground-truth out2m_2/coords_3d.csv
+ 1018  2026-04-06 15:57:32 diff converted_coords_3d.csv converted_coords_3d_check.csv 
+
+
+
+
+#prediction on test data (3D reconstruction from DLC 2D image observations of body parts)
+(mouse_sim_fix) hellwich@Artemis:~/hellwich/sdk3/mouseModel/mouse_sim$ python predict_behavior_pair_xlstm.py \
+  --ckpt out_pair_train2/behavior_pair_lstm.pt \
+  --coords-3d converted_coords_3d.csv \
+  --out-dir out2m_2_pred/from_imputed \
+  --report
+device: cuda
+gpu: NVIDIA GeForce RTX 4090 Laptop GPU
+wrote: out2m_2_pred/from_imputed/ethogram_pred_converted_coords_3d.csv.csv
+
+== converted_coords_3d.csv ==
+Interaction f1: 0.6147
+              precision    recall  f1-score   support
+
+           0     0.9800    0.6930    0.8119      1417
+           1     0.4549    0.9478    0.6147       383
+
+    accuracy                         0.7472      1800
+   macro avg     0.7175    0.8204    0.7133      1800
+weighted avg     0.8683    0.7472    0.7700      1800
+
+Rear0 f1 (non-interaction): 0.8116
+              precision    recall  f1-score   support
+
+           0     0.9809    1.0000    0.9904      1335
+           1     1.0000    0.6829    0.8116        82
+
+    accuracy                         0.9817      1417
+   macro avg     0.9904    0.8415    0.9010      1417
+weighted avg     0.9820    0.9817    0.9800      1417
+
+Rear1 f1 (non-interaction): 0.8066
+              precision    recall  f1-score   support
+
+           0     0.9776    0.9962    0.9868      1314
+           1     0.9359    0.7087    0.8066       103
+
+    accuracy                         0.9753      1417
+   macro avg     0.9567    0.8525    0.8967      1417
+weighted avg     0.9746    0.9753    0.9737      1417
+
+Ethograms written to: out2m_2_pred/from_imputed
+
+
+#comparison of 3 DL models:
+(mouse_sim_fix) hellwich@Artemis:~/hellwich/sdk3/mouseModel/mouse_sim$ python predict_behavior_pair_xlstm.py   --ckpt out_pair_train2/behavior_pair_xlstm.pt   --coords-3d converted_coords_3d.csv   --out-dir out2m_2_pred/from_imputed/xlstm   --report
+device: cuda
+gpu: NVIDIA GeForce RTX 4090 Laptop GPU
+{'verbose': True, 'with_cuda': True, 'extra_ldflags': ['-L/usr/local/cuda-12.8/lib', '-lcublas'], 'extra_cflags': ['-DSLSTM_HIDDEN_SIZE=128', '-DSLSTM_BATCH_SIZE=8', '-DSLSTM_NUM_HEADS=4', '-DSLSTM_NUM_STATES=4', '-DSLSTM_DTYPE_B=float', '-DSLSTM_DTYPE_R=__nv_bfloat16', '-DSLSTM_DTYPE_W=__nv_bfloat16', '-DSLSTM_DTYPE_G=__nv_bfloat16', '-DSLSTM_DTYPE_S=__nv_bfloat16', '-DSLSTM_DTYPE_A=float', '-DSLSTM_NUM_GATES=4', '-DSLSTM_SIMPLE_AGG=true', '-DSLSTM_GRADIENT_RECURRENT_CLIPVAL_VALID=false', '-DSLSTM_GRADIENT_RECURRENT_CLIPVAL=0.0', '-DSLSTM_FORWARD_CLIPVAL_VALID=false', '-DSLSTM_FORWARD_CLIPVAL=0.0', '-U__CUDA_NO_HALF_OPERATORS__', '-U__CUDA_NO_HALF_CONVERSIONS__', '-U__CUDA_NO_BFLOAT16_OPERATORS__', '-U__CUDA_NO_BFLOAT16_CONVERSIONS__', '-U__CUDA_NO_BFLOAT162_OPERATORS__', '-U__CUDA_NO_BFLOAT162_CONVERSIONS__'], 'extra_cuda_cflags': ['-Xptxas="-v"', '-gencode', 'arch=compute_80,code=compute_80', '-res-usage', '--use_fast_math', '-O3', '-Xptxas -O3', '--extra-device-vectorization', '-DSLSTM_HIDDEN_SIZE=128', '-DSLSTM_BATCH_SIZE=8', '-DSLSTM_NUM_HEADS=4', '-DSLSTM_NUM_STATES=4', '-DSLSTM_DTYPE_B=float', '-DSLSTM_DTYPE_R=__nv_bfloat16', '-DSLSTM_DTYPE_W=__nv_bfloat16', '-DSLSTM_DTYPE_G=__nv_bfloat16', '-DSLSTM_DTYPE_S=__nv_bfloat16', '-DSLSTM_DTYPE_A=float', '-DSLSTM_NUM_GATES=4', '-DSLSTM_SIMPLE_AGG=true', '-DSLSTM_GRADIENT_RECURRENT_CLIPVAL_VALID=false', '-DSLSTM_GRADIENT_RECURRENT_CLIPVAL=0.0', '-DSLSTM_FORWARD_CLIPVAL_VALID=false', '-DSLSTM_FORWARD_CLIPVAL=0.0', '-U__CUDA_NO_HALF_OPERATORS__', '-U__CUDA_NO_HALF_CONVERSIONS__', '-U__CUDA_NO_BFLOAT16_OPERATORS__', '-U__CUDA_NO_BFLOAT16_CONVERSIONS__', '-U__CUDA_NO_BFLOAT162_OPERATORS__', '-U__CUDA_NO_BFLOAT162_CONVERSIONS__']}
+Using /home/hellwich/.cache/torch_extensions/py311_cu121 as PyTorch extensions root...
+Detected CUDA files, patching ldflags
+Emitting ninja build file /home/hellwich/.cache/torch_extensions/py311_cu121/slstm_HS128BS8NH4NS4DBfDRbDWbDGbDSbDAfNG4SA1GRCV0GRC0d0FCV0FC0d0/build.ninja...
+Building extension module slstm_HS128BS8NH4NS4DBfDRbDWbDGbDSbDAfNG4SA1GRCV0GRC0d0FCV0FC0d0...
+Allowing ninja to set a default number of workers... (overridable by setting the environment variable MAX_JOBS=N)
+ninja: no work to do.
+Loading extension module slstm_HS128BS8NH4NS4DBfDRbDWbDGbDSbDAfNG4SA1GRCV0GRC0d0FCV0FC0d0...
+wrote: out2m_2_pred/from_imputed/xlstm/ethogram_pred_converted_coords_3d.csv.csv
+
+== converted_coords_3d.csv ==
+Interaction f1: 0.6702
+              precision    recall  f1-score   support
+
+           0     0.9460    0.8278    0.8830      1417
+           1     0.5643    0.8251    0.6702       383
+
+    accuracy                         0.8272      1800
+   macro avg     0.7551    0.8264    0.7766      1800
+weighted avg     0.8648    0.8272    0.8377      1800
+
+Rear0 f1 (non-interaction): 0.6776
+              precision    recall  f1-score   support
+
+           0     0.9848    0.9708    0.9777      1335
+           1     0.6139    0.7561    0.6776        82
+
+    accuracy                         0.9584      1417
+   macro avg     0.7993    0.8634    0.8277      1417
+weighted avg     0.9633    0.9584    0.9604      1417
+
+Rear1 f1 (non-interaction): 0.8293
+              precision    recall  f1-score   support
+
+           0     0.9863    0.9871    0.9867      1314
+           1     0.8333    0.8252    0.8293       103
+
+    accuracy                         0.9753      1417
+   macro avg     0.9098    0.9062    0.9080      1417
+weighted avg     0.9752    0.9753    0.9752      1417
+
+Ethograms written to: out2m_2_pred/from_imputed/xlstm
+(mouse_sim_fix) hellwich@Artemis:~/hellwich/sdk3/mouseModel/mouse_sim$ python predict_behavior_pair_xlstm.py   --ckpt out_pair_train2/behavior_pair_transformer.pt   --coords-3d converted_coords_3d.csv   --out-dir out2m_2_pred/from_imputed/transformer   --report
+device: cuda
+gpu: NVIDIA GeForce RTX 4090 Laptop GPU
+wrote: out2m_2_pred/from_imputed/transformer/ethogram_pred_converted_coords_3d.csv.csv
+
+== converted_coords_3d.csv ==
+Interaction f1: 0.7240
+              precision    recall  f1-score   support
+
+           0     0.9822    0.8200    0.8938      1417
+           1     0.5867    0.9452    0.7240       383
+
+    accuracy                         0.8467      1800
+   macro avg     0.7845    0.8826    0.8089      1800
+weighted avg     0.8981    0.8467    0.8577      1800
+
+Rear0 f1 (non-interaction): 0.8286
+              precision    recall  f1-score   support
+
+           0     0.9823    1.0000    0.9911      1335
+           1     1.0000    0.7073    0.8286        82
+
+    accuracy                         0.9831      1417
+   macro avg     0.9912    0.8537    0.9098      1417
+weighted avg     0.9834    0.9831    0.9817      1417
+
+Rear1 f1 (non-interaction): 0.8432
+              precision    recall  f1-score   support
+
+           0     0.9813    0.9970    0.9891      1314
+           1     0.9512    0.7573    0.8432       103
+
+    accuracy                         0.9795      1417
+   macro avg     0.9662    0.8771    0.9161      1417
+weighted avg     0.9791    0.9795    0.9785      1417
+
+Ethograms written to: out2m_2_pred/from_imputed/transformer
+(mouse_sim_fix) hellwich@Artemis:~/hellwich/sdk3/mouseModel/mouse_sim$ python predict_behavior_pair_xlstm.py   --ckpt out_pair_train2/behavior_pair_lstm.pt   --coords-3d converted_coords_3d.csv   --out-dir out2m_2_pred/from_imputed/lstm   --report
+device: cuda
+gpu: NVIDIA GeForce RTX 4090 Laptop GPU
+wrote: out2m_2_pred/from_imputed/lstm/ethogram_pred_converted_coords_3d.csv.csv
+
+== converted_coords_3d.csv ==
+Interaction f1: 0.6147
+              precision    recall  f1-score   support
+
+           0     0.9800    0.6930    0.8119      1417
+           1     0.4549    0.9478    0.6147       383
+
+    accuracy                         0.7472      1800
+   macro avg     0.7175    0.8204    0.7133      1800
+weighted avg     0.8683    0.7472    0.7700      1800
+
+Rear0 f1 (non-interaction): 0.8116
+              precision    recall  f1-score   support
+
+           0     0.9809    1.0000    0.9904      1335
+           1     1.0000    0.6829    0.8116        82
+
+    accuracy                         0.9817      1417
+   macro avg     0.9904    0.8415    0.9010      1417
+weighted avg     0.9820    0.9817    0.9800      1417
+
+Rear1 f1 (non-interaction): 0.8066
+              precision    recall  f1-score   support
+
+           0     0.9776    0.9962    0.9868      1314
+           1     0.9359    0.7087    0.8066       103
+
+    accuracy                         0.9753      1417
+   macro avg     0.9567    0.8525    0.8967      1417
+weighted avg     0.9746    0.9753    0.9737      1417
+
+Ethograms written to: out2m_2_pred/from_imputed/lstm
+
+
+
+#please note the difference between mouse_sim and mouse_sim_fix conda environments
+(mouse_sim) hellwich@Artemis:~/hellwich/sdk3/mouseModel/mouse_sim$ python overlay_coords3d_on_videos.py   --coords-3d converted_coords_3d.csv   --cameras out2m_2/cameras.json   --template mouse3_mesh_shortTail.txt   --topIn out2m_2_render/cam1_top.mp4   --frontIn out2m_2_render/cam2_front.mp4   --sideIn out2m_2_render/cam3_side.mp4   --topOut out2m_2_render/converted_coords3d_top_overlay.mp4   --frontOut out2m_2_render/converted_coords3d_front_overlay.mp4   --sideOut out2m_2_render/converted_coords3d_side_overlay.mp4   --joinedVideo out2m_2_render/converted_coords3d_joined_overlay.mp4   --mouse0-bgr 0,255,0   --mouse1-bgr 0,0,255
+Wrote:
+  out2m_2_render/converted_coords3d_top_overlay.mp4
+  out2m_2_render/converted_coords3d_front_overlay.mp4
+  out2m_2_render/converted_coords3d_side_overlay.mp4
+  out2m_2_render/converted_coords3d_joined_overlay.mp4
+
+
+10-04-2026
+2026-04-11 00:03:25 python overlay_dlc_long_on_videos.py   --dlc-long /media/hellwich/Herakles/hellwich/hellwich/sdk3/mouseModel/LockBoxModel/mouse3D/2021-06-18_07-28-45_segment1_mouse291_combined_dlc_long.csv   --template mouseReal_mesh_shortTail.txt   --top-in   /media/hellwich/Herakles/hellwich/hellwich/sdk3/mouseModel/LockBoxModel/labeled/2021-06-18_07-28-45_segment1_mouse291_combined_top-down-view.avi   --top-cam   cam1_top   --front-in /media/hellwich/Herakles/hellwich/hellwich/sdk3/mouseModel/LockBoxModel/labeled/2021-06-18_07-28-45_segment1_mouse291_combined_front-view.avi --front-cam cam2_front   --side-in  /media/hellwich/Herakles/hellwich/hellwich/sdk3/mouseModel/LockBoxModel/labeled/2021-06-18_07-28-45_segment1_mouse291_combined_side-view.avi  --side-cam  cam3_side   --out-dir  /media/hellwich/Herakles/hellwich/hellwich/sdk3/mouseModel/LockBoxModel/mouse3D   --pcutoff 0.6

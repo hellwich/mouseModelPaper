@@ -1,0 +1,577 @@
+Title: Video Segmentation Debugging
+ID: 69bc5f9a-8484-838f-8a23-925f4be87f89
+
+User: The uploaded program has the task to improve the result of mouse body part extraction from a video containing two mice. It is run in the conda environment defined by .yml file and build.sh. The environment is prepared to do a bundle adjustment with the three video views analized py the uploaded python program at a later point in time. However, before bundle adjustment gross errors need to be eliminated. Those concern identity flips between the two mice and body part assignment errors when a body part is labelled to belong to mouse 0 while it belongs to mouse 1. In order to support the data cleaning/clearing, a segment anything sam (facebook/meta) segmentation is run on the video frames. We want to use it as a preparatory step before changing the DLC data that is input to the program. The program is run with
+
+(mouseba) hellwich@Artemis:~/hellwich/sdk3/mouseModel/mouseba/python$ python overlay_dlc_on_videos_v9_clean.py   --dlc ../dlc_long.csv   --topIn ../../mouse_sim/out2m_2_render/cam1_top.mp4   --frontIn ../../mouse_sim/out2m_2_render/cam2_front.mp4   --sideIn ../../mouse_sim/out2m_2_render/cam3_side.mp4   --topOut top_anno_v9_cleand.mp4   --frontOut front_anno_v9_cleand.mp4   --sideOut side_anno_v9_cleand.mp4   --joinedVideo joined_anno_v9_cleand.mp4   --template ../mouse3_mesh_shortTail.txt   --sam   --sam-checkpoint ./sam_vit_b_01ec64.pth   --sam-model-type vit_b   --sam-alpha 1.0   --mouse0-bgr "25,35,40"   --mouse1-bgr "40,35,25"   --sam-only   --sam-stats-out sam_stats_v9_cleand.json --sam-max-factor 99 --number-of-frames 90 --sam-debug-candidates --frame-interval 500,650
+
+Then it produces the uploaded .json file for debugging. The screenshot shows that frame 509 in the side camera at the bottom left does not segment the mice bodies correctly. Please analyse the problem and make suggestions to extend the log file.
+
+User: I configured to use ChatGPT 5.2. Please try an answer to the above request.
+
+Assistant: ### What’s going wrong in frame 509 (side view), based on your JSON
+
+In `sam_stats_v9_cleand_side.json`, frame **509** is reported as:
+
+- `frame_status = direct_accept`
+- both mice `direct_accept`
+
+…but the per-mouse debug shows why the visual result can still be wrong:
+
+**Mouse 1 (the problematic one)**
+- `num_candidates = 3`
+- **Selected mask area = 138 px** (tiny compared to calibration)
+- `selected_status = direct_accept`
+- In the listed top candidates, the only *non-huge* candidate has:
+  - `area = 138`, `area_ratio ≈ 0.48` (since `area_mean ≈ 289`)
+  - **`prompt_inside = False`**
+  - the other two candidates are enormous (`area ≈ 92k` and `449k`) and are rejected by the area upper bound.
+
+So SAM is effectively saying: “for this prompt, I can give you either (a) almost the whole frame, or (b) a tiny patch that doesn’t even contain the prompt point.”  
+Your current acceptance logic allows option **(b)** to be treated as a clean success.
+
+Two key reasons this slips through as “direct_accept”:
+
+1. **`passes` does not require `prompt_inside`**  
+   In `_score_mask_candidate()`, `passes = color_within and area_within and overlap_ratio <= 0.25`.  
+   `prompt_inside` only adds a +1.5 penalty, but does not fail the candidate.
+
+2. **There is no minimum-area sanity check**  
+   `area_within` only checks the **upper bound** `area_ratio <= sam_max_factor`. With `--sam-max-factor 99`, tiny masks are always “within”.
+
+Result: a tiny wrong mask can still be “passing” and gets picked, so **nearby retry never triggers**, and the frame is logged as a success.
+
+---
+
+## Suggestions to extend the log file (so this is diagnosable quickly)
+
+Right now your JSON has useful high-level counters plus `debug_frames`, but it’s missing the *decision context* needed to understand failures like frame 509.
+
+Below are concrete logging extensions that directly target identity flips + misassignment + SAM mis-segmentation.
+
+---
+
+### 1) Log the prompt provenance (DLC → prompt)
+
+Add a `prompt_debug` block per debug frame:
+
+- `dlc_frame` (mapped) and `video_frame` (source_frame_idx)
+- whether prompts came from:
+  - fresh DLC points, **or** `last_prompts` fallback
+- number of DLC points used after `sam_min_lik` filtering
+- if using k-means:
+  - cluster centers (raw)
+  - cluster sizes (how many points assigned to each cluster)
+  - within-cluster scatter (e.g., mean squared distance)
+  - distance between the two centers (small distance is a big red flag)
+- if using DLC identities (`--sam-use-dlc-ids`):
+  - per-individual counts and mean likelihood
+
+Why: when identity flips or bodyparts collapse onto one animal, k-means will often place both centers on one mouse or on background.
+
+---
+
+### 2) Log the prompt sorting / swap decision (identity-related)
+
+`_sort_prompts_by_reference()` may swap the two prompt centers based on local patch color. Log:
+
+- `prompts_before_sort` and `prompts_after_sort`
+- `swap = True/False`
+- the sampled patch colors `cols[0]`, `cols[1]`
+- `cost_noswap`, `cost_swap`
+- the reference colors used for the decision
+
+Why: this is exactly where identity consistency is enforced frame-to-frame. When it swaps incorrectly, it looks like an “identity flip”.
+
+---
+
+### 3) Log candidate scoring using the **actual** overlap mask used in selection
+
+Right now, `top_candidates` is computed with `other_mask=None`, but selection for mouse 1 is done with `other0` (mouse 0 mask), and mouse 0 is re-checked with `other1`.
+
+So the logged candidate ordering can differ from the true decision ordering (this already happens in frame 509: selected penalty doesn’t match the logged top candidate penalty for the same area).
+
+Fix: when `debug_candidates` is enabled, log *two* scored views:
+
+- `top_candidates_no_overlap` (what you have now)
+- `top_candidates_with_overlap` (scored with the actual `other_mask` used at that decision step)
+
+Also include per candidate:
+- `bbox` (xmin,ymin,xmax,ymax)
+- `centroid_xy`
+- `prompt_dist`, `prev_dist`
+- `overlap_ratio`
+- `prompt_inside`
+- `color_within`, `area_within`
+- **penalty components** (see next item)
+
+---
+
+### 4) Log a penalty breakdown (so tuning becomes systematic)
+
+Store the additive components used in `_score_mask_candidate()`:
+
+- `pen_color` (sum of channel overages)
+- `pen_area` (upper-bound term)
+- `pen_overlap`
+- `pen_prompt_outside`
+- `pen_prompt_dist`
+- `pen_prev_dist`
+- `bonus_sam_score`
+
+Why: without this, you can’t tell whether the model is failing because of overlap handling, color gating, area gating, or prompt geometry.
+
+---
+
+### 5) Log a multi-stage decision trace (v9 selection is multi-pass)
+
+`_sam_segment_two_mice_v9()` has a real pipeline:
+
+1) pick mouse0 (no overlap)  
+2) pick mouse1 (avoid mouse0)  
+3) re-pick mouse0 (avoid mouse1)  
+4) overlap resolution trims one mask
+
+Log a `selection_trace` per debug frame:
+
+- `choice0_initial`: area, passes, penalty, prompt_inside, overlap_ratio
+- `choice1_initial`: same
+- `choice0_recheck`: same
+- `overlap_resolution`: which mouse lost overlap, and how much area was removed
+- nearby retry:
+  - whether used
+  - which nearby points were tried (and which one produced the selected mask)
+
+Why: frame 509 strongly suggests “mouse0 changed after mouse1 existed” — you want that explicitly visible.
+
+---
+
+### 6) Add “suspicious accept” flags and counts (your real pain point)
+
+Right now, a frame can be marked `direct_accept` while being garbage. Add per-mouse flags:
+
+- `flag_prompt_outside_selected`  (selected mask does not contain the prompt)
+- `flag_no_candidate_contains_prompt`  (none of the SAM outputs contain the prompt)
+- `flag_area_too_small` (e.g., `area_ratio < 0.3` or `< 0.5`)
+- `flag_area_too_large` (even if still within max)
+- `flag_prompt_dist_large` (centroid far from expected prompt)
+- `flag_overlap_high` (even if still <= 0.25)
+
+Then in `render_stats`, aggregate counts of these flags.  
+Also: instead of capping debug frames at 50 unconditionally, preferentially include frames where any suspicious flag is true.
+
+This would immediately surface frame 509 as “accepted but suspicious”, which is what you actually care about for cleaning.
+
+---
+
+### 7) Store the exact prompts and previous centroids
+
+For bundle adjustment prep and cleaning, you’ll want reproducibility:
+
+- `prompt_xy_mouse0`, `prompt_xy_mouse1`
+- `prev_centroid_xy_mouse0`, `prev_centroid_xy_mouse1` (if present)
+- `selected_centroid_xy_mouse0`, `selected_centroid_xy_mouse1`
+
+This helps detect identity flips as discontinuities.
+
+---
+
+## Minimal log changes that would have exposed frame 509 instantly
+
+If you only do three things, do these:
+
+1) Log `selected_prompt_inside` explicitly (and `n_prompt_inside_true_candidates`)  
+2) Add `min_area_ratio` / “too small” flag to the debug (even if you don’t change selection yet)  
+3) Log candidate scoring with the *actual* `other_mask` used
+
+That combination would make frame 509 clearly read as:
+
+> mouse1 accepted tiny mask; prompt not inside; no candidate includes prompt; huge masks rejected; nearby retry not triggered.
+
+---
+
+If you want, I can propose a concrete JSON schema (keys + nesting) that stays backward-compatible with your current `sam_stats_out`, so you can extend without breaking downstream tooling.
+
+User: The next thing to fix is not the segmentation algorithm yet. It is the diagnostics. The JSON should log, per mouse and frame:
+
+best pre-overlap candidate,
+
+final post-overlap mask,
+
+final displayed area,
+
+final displayed status,
+
+whether the final mask had prompt_inside=false.
+
+That will make the stats trustworthy enough to guide the next algorithmic change. If you agree with this, please go ahead and change the python code accordingly.
+
+Assistant: Agreed — those five per-frame/per-mouse fields are exactly what’s missing to make the JSON trustworthy (especially because overlap trimming can change the displayed mask and can flip `prompt_inside` after the fact).
+
+I updated the script accordingly. Download the modified version here:
+
+[Download the updated Python script](sandbox:/mnt/data/overlay_dlc_on_videos_v9_clean_frameNumbersVideo_diagfix.py)
+
+## What changed (in the JSON)
+
+For each debug frame, inside:
+
+`render_stats["debug_frames"][...]["mouse_debug"][mid]`
+
+you now get (per mouse):
+
+- `best_pre_overlap_candidate`  
+  *The chosen mask **before** overlap trimming* (includes encoded `mask`, `area`, `bbox`, `centroid_xy`, `prompt_inside`, etc.)
+
+- `final_post_overlap_candidate`  
+  *The chosen mask **after** overlap trimming* (includes encoded `mask`, refreshed `area`, refreshed `prompt_inside`, etc.)
+
+- `final_displayed_area`  
+  `0` if no mask is displayed, otherwise the area of the displayed mask.
+
+- `final_displayed_status`  
+  One of `direct_accept`, `nearby_retry_accept`, `fallback_accept`, `no_mask` — matching what the overlay “bulb” logic uses.
+
+- `final_prompt_inside_false`  
+  `True` iff the **displayed** final mask exists and has `prompt_inside == False` (otherwise `False` / `None` if no mask).
+
+### About “final post-overlap mask” storage
+The mask is stored compactly as:
+`packbits -> zlib -> base64`  
+so the JSON stays manageable for ~50 debug frames.
+
+If you want to decode it:
+
+```python
+import base64, zlib, numpy as np
+
+enc = entry["mask"]  # the dict under best_pre_overlap_candidate["mask"] etc.
+h, w = enc["shape"]
+packed = zlib.decompress(base64.b64decode(enc["data"]))
+bits = np.frombuffer(packed, dtype=np.uint8)
+mask = np.unpackbits(bits, bitorder=enc.get("bitorder", "big"))[:h*w].reshape(h, w).astype(bool)
+```
+
+If you want the same fields logged for **every processed frame** (not only the capped debug list), say so and I’ll wire these into a lightweight per-frame record stream (without always embedding masks).
+
+User: I am not really sure whether it makes sense to blow up the logs substantially. I am currently running the program for 90 frames as before and will then upload the log.   However the important follow up question certainly is how to change the system without changing the good characteristics shown over very many frames and - at the same time - fix the error in frame 509.
+
+Assistant: You’re right to worry about “fixing 509” without wrecking what already works: the safest way is to **add a narrowly-triggered guardrail path** that activates only on clearly pathological outcomes, and otherwise leaves the current behavior untouched.
+
+### What the new diagnostics already tell us about frame 509
+In your updated side-view log, frame **509** has (mouse1):
+
+- `final_displayed_status: "direct_accept"`
+- `final_displayed_area: 138`
+- `final_prompt_inside: false` and `final_prompt_inside_false: true` fileciteturn6file1
+
+Given your calibration for mouse1 (side view) has `area_mean ≈ 289` fileciteturn5file0, this accepted mask is **tiny (~0.48× mean)** and **doesn’t contain the prompt point**. That is exactly the kind of “gross error” you want to eliminate before bundle adjustment—yet today it is counted as a success.
+
+### How to change the system without changing the good frames
+The trick is: **do not change the scoring/ranking for the normal path.**  
+Instead, add a *second-stage “suspicious accept” handler* that only runs when the final output looks obviously wrong.
+
+A conservative design that preserves your current good characteristics:
+
+#### 1) Define “suspicious final mask” predicates (post-selection)
+Trigger the fallback path only if **any** of these hold:
+
+- `final_prompt_inside_false == true` (like frame 509 mouse1) fileciteturn6file1  
+- `final_displayed_area` is a strong outlier vs calibration (e.g. `< 0.5 * area_mean` or `> k * area_mean`)  
+  - For 509, `138 < 0.5 * 289` is true. fileciteturn6file1turn5file0
+- optionally: very low SAM score or extreme color-z (but keep these optional to avoid overfitting)
+
+These checks don’t touch any frame that already looks sane.
+
+#### 2) When suspicious, re-run *only the recovery logic*
+In suspicious frames, do *one* of the following (in order), stopping as soon as you get a non-suspicious result:
+
+1) **Force a nearby-retry even if the first pass “accepted”**  
+   (This is the minimal intervention and leverages your existing behavior.)
+2) If retry still yields `prompt_inside=false`, **prefer any candidate with `prompt_inside=true`** even if its penalty is slightly worse (bounded by a small tolerance), otherwise:
+3) **Fallback to “no_mask” or previous-frame mask** (depending on what is safer for downstream cleaning)
+
+Crucially: none of this runs on the vast majority of frames, so the “good characteristics” remain.
+
+#### 3) Add regression accounting, not more bulky logging
+You don’t need to blow up JSON sizes to validate this change. Keep masks only for debug frames, but add **aggregate counters** to `render_stats`, e.g.:
+
+- `final_prompt_inside_false_count[mouse]`
+- `suspicious_final_count[mouse]`
+- `suspicious_recovered_count[mouse]`
+- `suspicious_unrecovered_count[mouse]`
+
+These are tiny but let you A/B compare behavior over long runs.
+
+### Why this targets 509 specifically without collateral damage
+Frame 509 is not “borderline”; it is **structurally bad** (prompt outside + tiny mask) yet currently reported as `direct_accept`. fileciteturn6file1  
+A post-selection guardrail based on `final_prompt_inside_false` and/or an area-outlier threshold will almost never trigger on good frames, but will reliably trigger on 509-like failures.
+
+---
+
+If you upload the next 90-frame run log, I can quickly extract:
+- how often `final_prompt_inside_false` occurs (per mouse),
+- how often tiny-mask accepts occur,
+- and what thresholds (0.4×, 0.5×, 0.6× of `area_mean`) would catch 509 while minimizing false positives.
+
+User: This is another 90 frames log. Do you need more or does it suffice to extract the statistics?
+
+Assistant: Yes — **this 90-frame log is already enough to extract the core statistics you need** (accept modes, retry/fallback frequency, and whether the *final displayed* mask violates `prompt_inside`). You don’t need more **to start**.
+
+### What you can extract reliably from this log
+From `render_stats` you already get “global” (all 90 processed frames) rates for stability/regression checking:
+
+- `frame_status_counts`: **80 direct**, **9 nearby-retry**, **1 fallback**, **0 no_mask** fileciteturn10file0  
+- per-mouse status counts: mouse0 had **3** nearby-retry; mouse1 had **8** nearby-retry and **1** fallback fileciteturn10file0  
+- `mouse1_selected_fail = 1` in this run (mouse0 had 0 fails) fileciteturn10file0  
+
+That’s enough to judge whether any upcoming guardrail change is “quiet” (i.e., doesn’t increase retries/fallbacks across many frames).
+
+### And it does contain the frame-509 pathology you care about
+Frame **509**, mouse **1** shows exactly the gross error signature in the **final displayed mask**:
+
+- `final_displayed_area = 138`
+- `final_displayed_status = "direct_accept"`
+- `final_prompt_inside = false`
+- `final_prompt_inside_false = true` fileciteturn11file9  
+
+So your new diagnostics are doing their job: they *prove* this was treated as a success, while clearly flagging it as untrustworthy for data cleaning. fileciteturn11file9
+
+### The one caveat
+Your detailed per-frame/per-mouse fields live only in `debug_frames`, which is still capped at 50 entries in the code (`len(debug_frames) < 50`). fileciteturn9file16  
+So:
+- the **global** acceptance/retry/fallback counts are reliable for all 90 frames,
+- but any statistic that depends on `final_prompt_inside_false` (or area quantiles, etc.) is only as complete as the `debug_frames` subset *unless* you add aggregate counters.
+
+### Minimal extra instrumentation (no log blow-up) that I’d still add
+To avoid “big JSON” but still make stats complete, add *only counters + a few worst-frame IDs* across **all** frames, e.g.:
+
+- `final_prompt_inside_false_count_by_mouse`
+- `final_displayed_area_min_by_mouse` and `min_area_frame_by_mouse`
+- optionally: `k_smallest_areas` (keep top 10 frame indices per mouse)
+
+That keeps the JSON essentially the same size while making the statistics trustworthy even when `debug_frames` truncates.
+
+If you want, I can patch the script to add exactly those aggregate counters (no extra masks, no per-frame expansion), so you can run long intervals safely and still get complete failure rates.
+
+User: Yes please patch the script with the aggregate counters. I will then run it on 1800 frames with 3 videos each. So no need to still have the large logs for 50 frames.
+
+And please keep everything the same except the logging.
+
+Assistant: Done. I patched the script to **keep the behavior identical** and make the JSON **compact but statistically trustworthy** for long runs (e.g., 1800 frames × 3 views).
+
+Key changes are **logging only**:
+
+- **No more per-frame `debug_frames` payloads** (the key remains for backward compatibility but stays empty).
+- Added **aggregate counters** computed from the **final displayed (post-overlap) masks** for *all processed frames*.
+
+### New fields in `render_stats`
+Per mouse (`"0"` / `"1"`):
+
+- `final_prompt_inside_false_count`: count of frames where the final displayed mask exists and `prompt_inside == false`
+- `final_prompt_inside_false_frames`: **capped** list (first 25) of frame indices where that happened
+- `final_displayed_area_min`: minimum nonzero displayed area observed
+- `final_displayed_area_min_frame`: frame index where that minimum occurred
+- Also:
+  - `error_count`
+  - `error_frames` (first 25 exceptions with frame index + message)
+
+### Patched script
+[Download the patched script](sandbox:/mnt/data/overlay_dlc_on_videos_v9_clean_frameNumbersVideo_aggstats.py)
+
+If you run your 1800-frame job with this, the JSON should remain small while still telling you:
+- how often “accepted but prompt outside” happens,
+- which frames to inspect first (without embedding masks),
+- worst-case tiny-mask events, and
+- whether errors occurred.
+
+User: Please have a look to frame 656 in side view (bottom left). There a different error occurs that is also logged in the previously uploaded stats file. Please analyze that error , too. There the color of mouse 1 seems to jump over to the color of mouse 0 and some structure in the background.
+
+Assistant: Frame **656 (side view, bottom-left)** looks like a *different failure mode* than frame 509:
+
+- The **overlay color for mouse1 appears to switch to mouse0’s color**, and
+- a **background structure gets tinted** as if it were part of a mouse.
+
+Even without the per-frame debug record for 656 (your earlier JSON `debug_frames` is capped at 50, so 656 won’t necessarily be present), the screenshot pattern is very characteristic of an **identity swap happening *before* SAM**, at the *prompt ordering* step, plus a **bad prompt landing on background**.
+
+## Likely root cause: prompt ordering flips in `_sort_prompts_by_reference`
+Your pipeline does this per frame:
+
+1) derive two prompt centers from DLC,
+2) **sort them to mouse0/mouse1 by comparing local patch color to the reference BGRs**, and swap if it seems better, and only then
+3) run SAM per mouse.
+
+The swap logic is literally:
+
+- compute `cost_noswap` and `cost_swap`
+- **if `cost_swap < cost_noswap`, swap the two prompts** fileciteturn13file18
+
+This means a *single noisy frame* can flip identities in one camera even if the other cameras remain consistent (because the decision is **view-local** and **frame-local**).
+
+### Why 656 can flip
+In side view, when:
+- the mouse is partially occluded,
+- the prompt is near the other mouse,
+- the prompt lands on fur + shadow, or even on a wall/texture,
+
+then the “median patch color” around the prompt can look closer to the *other* reference prototype, making `cost_swap < cost_noswap` and causing a swap. fileciteturn13file18
+
+Once that happens, the **colors in the overlay will appear swapped**, exactly like you observed.
+
+## Why background structure gets colored
+Two ways this happens (both consistent with your screenshot):
+
+1) **Prompt lands on background** (because DLC points for that mouse are wrong or misassigned in that frame).  
+   SAM then segments some coherent background region near that prompt. If the region passes your current gates, it gets displayed and tinted.
+
+2) **Prompt swap + background prompt**:  
+   If mouse1’s prompt is on background and the prompt sorter swaps identities, that background mask can become “mouse0” for that frame, hence “mouse1 jumps to mouse0 color and paints background”.
+
+## Another mechanism that can amplify it: prompt fallback
+If prompts can’t be computed from DLC for a frame, your code falls back to `last_prompts` (the previous valid prompts). fileciteturn13file11  
+That preserves continuity, but it can also be wrong if the animals moved a lot or if the previous frame itself had a swap.
+
+---
+
+# What I’d do next (diagnostics only, minimal log size)
+
+Since you’re moving to **1800 frames × 3 views**, you’re right: you can’t rely on per-frame debug dumps. Instead, add *aggregate counters* that make this failure mode measurable without bloating JSON.
+
+### Add these aggregate counters (tiny but decisive)
+
+1) **Prompt swap counter**
+- `prompt_sort_swapped_count`
+- `prompt_sort_swapped_frames` (cap list to first N, e.g. 25)
+
+This directly detects the “color jump” mechanism because that jump is *exactly* a swap at `_sort_prompts_by_reference`. fileciteturn13file18
+
+2) **Prompt fallback counter**
+- `prompt_fallback_used_count`
+- `prompt_fallback_used_frames` (cap)
+
+This detects frames where you used `last_prompts` instead of DLC-derived prompts. fileciteturn13file11
+
+3) **Prompt plausibility / jump counter**
+- per mouse: `prompt_jump_gt_px_count` and frames (e.g. threshold 50 px, configurable)
+This catches “prompt landed on background” frames even if SAM still returns some plausible-looking mask.
+
+4) **Final-mask cross-check counters** (you already started this direction)
+- `final_prompt_inside_false_count` (post-overlap, per mouse)
+- `final_displayed_area_min/max` + frames (per mouse)
+
+Those help catch “background got colored” and “tiny blob accepted” without storing masks.
+
+---
+
+# To *confirm* the hypothesis for frame 656 quickly
+Do a **micro-run** around that frame with full debug enabled (only a handful of frames, so log size stays small), e.g.:
+
+- `--frame-interval 652,660 --number-of-frames 9 --sam-debug-candidates`
+
+Then check:
+- whether `_sort_prompts_by_reference` swapped that frame (with the swap counter above),
+- whether the prompt for the “bad” mouse is actually on background,
+- and whether SAM candidates that contain the prompt are all “background-ish”.
+
+If you want, I can patch your current “aggregate-only” script to add exactly the three additional counters above (**swap / fallback / prompt-jump**) while keeping everything else unchanged. That would make errors like frame 656 show up automatically in your 1800×3 run, without any large logs.
+
+User: In the top view mice do not occlude each other. So not many problems occur. But in frame 177 something goes wrong: prompt dots beside both mice, no constant color imposed to segments (at least not visible at mouse bodies). Please analyze and suggest a source code improvement. Do not code yet, however.
+
+Assistant: ### What frame 177 is telling you (top view)
+
+Your `sam_stats_v9_cleand_top.json` already flags that something “prompt-related” is happening around that time: **frame 177 is in `final_prompt_inside_false_frames` for mouse 0**, and the problem clusters around **174–180** (mouse0: 174,176,177,180; mouse1: 174,180, …). fileciteturn16file12  
+That matches your visual report: **the prompt dots are not on the bodies**, and whatever mask got rendered is not “anchored” to the intended mouse.
+
+Mechanically, this can happen via *two independent pathways* in your code:
+
+---
+
+### Pathway A — the prompts themselves are bad (most likely in top view)
+
+In the production loop you compute prompts like this:
+
+- Filter DLC rows by `sam_min_lik`
+- Compute 2 prompts from the remaining points using either:
+  - DLC IDs (`--sam-use-dlc-ids`), or
+  - **k-means in XY** (default when `--sam-use-dlc-ids` is not set)
+
+If prompt computation fails (too few points), you **reuse `last_prompts`**. fileciteturn20file0turn20file2
+
+So in top view, a single DLC “glitch frame” can produce:
+- too few high-likelihood points (prompt falls back to stale `last_prompts`), or
+- enough points but spatially corrupted → k-means returns centers beside the mice.
+
+Because top view has no occlusion, the *safest* prompt source is almost always the DLC IDs (when they exist and are stable).
+
+---
+
+### Pathway B — the mask selection is allowed to “drift away” from the prompt
+
+Even if the prompt is good, your selection logic can still choose a mask where `prompt_inside == false` because `prompt_inside` is not enforced as a hard constraint in “passes”; it’s only one feature among others. You can see that in your debug JSONs: there are candidates with **`passes: true` while `prompt_inside: false`**. fileciteturn16file8
+
+That makes `final_prompt_inside_false_frames` possible even with correct prompts, and it’s exactly the kind of “background capture” failure that creates confusing overlays.
+
+---
+
+### Why “no constant color” may be *real* or just *invisible*
+
+Your overlay colors are not the CLI `--mouse0-bgr/--mouse1-bgr` constants. In the render loop you use:
+
+- `overlay0 = stats_by_mouse[0].get('color_mean', mouse0_bgr)`
+- `overlay1 = stats_by_mouse[1].get('color_mean', mouse1_bgr)`
+- then `_overlay_masks_constant_color(...)` blends those. fileciteturn20file2turn19file2
+
+So with `--sam-alpha 1.0`, you *are* overwriting pixels — but **with the learned fur-like mean colors**, which can look like “no imposed constant color” (especially in top view where fur dominates the mask).
+
+That’s a visualization/diagnostics mismatch: you set explicit BGRs expecting high-contrast debugging, but the code mostly ignores them for the overlay tint.
+
+---
+
+## Source-code improvements I’d do next (no code yet, as requested)
+
+### 1) Make the overlay color truly diagnostic (low risk, doesn’t touch segmentation logic)
+Add a switch (or just change default) so the overlay tint uses the **manual BGRs** (`mouse0_bgr/mouse1_bgr`) rather than `stats_by_mouse[*]['color_mean']`.
+
+- Keep `color_mean` for scoring/priors.
+- Use manual colors for display so errors are unmistakable.
+
+This directly addresses your “no constant color imposed” observation without changing SAM itself.
+
+---
+
+### 2) Make prompt generation robust specifically for top view (minimal behavioral change)
+Because top view is non-occluding, you can safely prefer ID-based prompts:
+
+- If `use_dlc_ids` is available (2 individuals present with enough points), use it.
+- Only fall back to XY k-means if IDs are missing/degenerate.
+
+If you want this to be *adaptive* (to avoid changing good behavior elsewhere):
+- compute both prompt sets (ID-based and k-means),
+- choose the one that is more **temporally consistent** with `last_prompts` / `prev_centroids`
+  (e.g., minimal displacement / reasonable inter-mouse distance).
+
+This targets exactly frames like 177 where the dots jump beside the mice.
+
+---
+
+### 3) Tighten the acceptance rule: “prompt_inside must be true” unless you are in explicit fallback
+To stop masks “snapping” to background structures:
+
+- In the robust scorer, treat `prompt_inside == false` as a **hard reject** for `direct_accept` / `nearby_retry_accept`.
+- Only allow `prompt_inside == false` in `fallback_accept`, and only if *no* prompt-inside candidate exists after nearby retries.
+
+You already log `final_prompt_inside_false_frames` in aggregate for top view fileciteturn16file12 — this change should push that list toward zero *without* changing good frames, because on good frames SAM almost always yields a prompt-inside mask.
+
+---
+
+### 4) Add one small aggregate metric to validate the fix (still not “big logs”)
+Since you’re running long (1800×3), a tiny diagnostic is worth it:
+
+- `prompts_source_counts`: `{ "fresh": N, "last_prompts": M, "dlc_ids": K, "kmeans": L, "rejected_by_sanity": S }`
+- `prompt_jump_histogram` (bucketed max displacement)
+
+This will tell you immediately whether frame 177 is a “bad prompts” event vs a “bad selection” event, without storing per-frame blobs.
+
+---
+
+If you want the *fastest confirmation* before changing anything else: run a short top-only interval around the failure with candidate debug enabled (e.g., frames 165–190) and check whether (a) the prompt coords are already wrong, or (b) a prompt-inside candidate existed but lost to scoring. The fixes above correspond cleanly to those two outcomes.

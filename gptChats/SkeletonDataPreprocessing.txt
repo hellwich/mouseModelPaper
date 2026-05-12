@@ -1,0 +1,193 @@
+Title: Skeleton Data Preprocessing
+ID: 69f1ea7b-ea0c-8390-80a8-2d65090a8415
+
+User: Describe how this training program pre-processes skeleton data of the two mice (whose behavior is classified) before it is fed into training to estimate behavior from it.
+
+Assistant: I’ll trace the data path from CSV loading through coordinate transforms, feature construction, label derivation, augmentation, and windowing, then separate what happens only for baselines versus deep models.
+
+Assistant: The training program turns the raw two-mouse skeleton tracks into a per-frame feature sequence in a **pair-centric coordinate system**, then slices that sequence into temporal windows for training. Source: uploaded `train_behavior_pair_xlstm_enabled.py`. fileciteturn0file0
+
+### 1. CSV loading and canonicalization
+
+It expects each `coords_3d.csv` to contain rows like:
+
+```text
+frame, time, mouse_id, behavior, node, x, y, z
+```
+
+For each file/run, it:
+
+- normalizes node names by stripping whitespace, lowercasing, and replacing spaces with underscores;
+- selects two mouse IDs, by default the two smallest IDs found;
+- builds a fixed node order, reused across runs;
+- groups data by `(frame, mouse_id)`;
+- verifies that both selected mice exist in every frame;
+- stores coordinates as a tensor:
+
+```text
+pos: (T, 2, K, 3)
+```
+
+where `T` is frames, `2` is the two mice, `K` is skeleton nodes, and `3` is x/y/z. Coordinates are optionally multiplied by `--scale-mm`, so the model can work in scaled physical units.
+
+The raw behavior labels are stored as:
+
+```text
+beh: (T, 2)
+```
+
+with codes:
+
+```text
+0 = run
+1 = rear
+2 = interact
+```
+
+### 2. Train/test split happens before feature preprocessing
+
+The program splits by run when multiple runs are supplied. If only one run exists, it splits that run temporally into a train segment and a test segment. This matters because the later preprocessing is applied independently to the train and test `PairRun` objects.
+
+### 3. Coordinates are transformed into a pair-centered frame
+
+The central preprocessing step is `to_pair_frame`.
+
+For each time step, it builds a local coordinate frame from the two mice’s `tail_root` points:
+
+```text
+origin = midpoint between mouse0 tail_root and mouse1 tail_root
+x-axis = vector from mouse0 tail_root to mouse1 tail_root, projected onto xy
+z-axis = world vertical direction
+y-axis = cross(z-axis, x-axis)
+```
+
+Then every keypoint of both mice is expressed relative to that per-frame coordinate system.
+
+Conceptually, this removes absolute arena position and global orientation. The model does not see “where in the world” the pair is; it sees the pose and interaction geometry of the two mice in a coordinate system centered and aligned on the pair.
+
+### 4. Per-frame feature vector construction
+
+After the pair-frame transform, `make_pair_features` flattens the full pair skeleton:
+
+```text
+pos_pair: (T, 2, K, 3)
+→ p: (T, 2*K*3)
+```
+
+It then adds two explicit geometric scalar features:
+
+```text
+nose_dist = distance between the two nose nodes
+tail_dist = distance between the two tail_root nodes
+```
+
+If velocity is enabled, which it is in the main training path, it also computes first differences of the flattened pair-frame coordinates:
+
+```text
+v[0]  = 0
+v[t]  = p[t] - p[t-1]
+```
+
+So the final per-frame feature vector is:
+
+```text
+X[t] = [flattened pair-frame positions,
+        flattened pair-frame velocities,
+        nose distance,
+        tail-root distance]
+```
+
+If there are `K` skeleton nodes, the feature dimension is:
+
+```text
+F = 2*(2*K*3) + 2 = 12K + 2
+```
+
+because it includes both positions and velocities for both mice, plus two scalar distances.
+
+### 5. Multi-task labels are derived
+
+The original per-mouse behavior labels are converted into three binary training targets plus a mask:
+
+```text
+y_int = 1 if either mouse has behavior 2, else 0
+y0    = 1 if mouse 0 is rearing, else 0
+y1    = 1 if mouse 1 is rearing, else 0
+mask  = 1 only on non-interaction frames
+```
+
+So the model is trained hierarchically:
+
+- one head predicts **interaction** for the pair;
+- one head predicts **rear vs run for mouse 0**;
+- one head predicts **rear vs run for mouse 1**;
+- the individual rear/run losses are only used when `mask == 1`, meaning only on non-interaction frames.
+
+### 6. Mouse-swap augmentation
+
+For each run, preprocessing creates two feature versions:
+
+```text
+X_base
+X_swap
+```
+
+`X_base` uses the original mouse ordering. `X_swap` swaps mouse 0 and mouse 1 in the raw world-coordinate tensor, then recomputes the pair frame and features from scratch.
+
+The interaction label stays the same, but the individual labels are swapped:
+
+```text
+y0_swap = y1_base
+y1_swap = y0_base
+```
+
+During deep-model training, each sampled window is deterministically pseudo-randomly chosen as either base or swapped according to `--swap-prob`, default `0.5`. This makes the model less dependent on arbitrary mouse identity ordering.
+
+### 7. Temporal windowing before deep training
+
+For LSTM, Transformer, and xLSTM models, the feature sequence is sliced into overlapping windows:
+
+```text
+X_window: (window, F)
+```
+
+with defaults:
+
+```text
+window = 20
+stride = 1
+```
+
+Each training item returns:
+
+```text
+X_window
+y_int_window
+y0_window
+y1_window
+mask_window
+```
+
+The DataLoader batches these into:
+
+```text
+(B, window, F)
+```
+
+which is what the sequence model receives.
+
+### 8. What is not done
+
+There is no learned or statistical normalization of the deep-model features in the preprocessing path. The coordinates are centered/rotated into the pair frame and optionally scaled by `--scale-mm`, but there is no `StandardScaler` for LSTM/Transformer/xLSTM input. `StandardScaler` is used only in the logistic-regression baseline.
+
+There is also no interpolation or imputation for missing skeleton nodes. The loader initializes missing coordinates to zero, but it raises an error if an entire mouse is missing for a frame.
+
+User: Please add a slide to this presentation summarizing feature vector construction for behavior estimation (from 3D skeleton data given as input).
+
+User: Please do so for this presentation file.
+
+Assistant: I’ll modify the latest uploaded deck (`SeminarMouseSimulation26_WOVideo.odp`) and preserve it as an ODP, adding one concise slide in the existing presentation style.
+
+Assistant: Done — I added the feature-vector construction slide as slide 8 in the ODP deck.
+
+[Download the updated presentation](sandbox:/mnt/data/SeminarMouseSimulation26_WOVideo_feature_vector.odp)
