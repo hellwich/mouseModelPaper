@@ -2,7 +2,7 @@
 
 mouse_sim: Simulates 3D mice skeletons moving in a cage depending on current behavior. Estimates behavior from 3D skeleton movement. Renders multi-view video of moving mice.
 
-free3D...: mouse mesh model
+free3D...: The mouse mesh model that has been used in this work can be found here: https://free3d.com/3d-model/mouse-rigged-5650.html
 
 dlc_mouse: Tracks 2D body parts in video.
 
